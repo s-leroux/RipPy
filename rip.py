@@ -1,6 +1,7 @@
 import argparse
 
 import re
+import os, os.path
 from itertools import chain
 from subprocess import Popen,call,PIPE
 from pipes import quote
@@ -13,7 +14,7 @@ MPLAYER_DUMP = """mplayer {infile} \\
             -dumpstream -dumpfile \\
             {outfile}"""
 
-FFMPEG = """ffmpeg -i {infile} \\
+FFMPEG = """ffmpeg -y -i {infile} \\
             """
 FFMPEG_VIDEO = """ \\
             -map 0:{sspec} \\
@@ -65,6 +66,7 @@ class Metadata:
         self._out_format = 'mkv'
         self.f_title = title_from_metadata
         self.f_year = constantly(None)
+        self.f_episode = constantly(None)
         self.f_interlaced = constantly(False) # There is probable an heuristic
 
         cmd = MPLAYER_GET_METADATA.format(fname= quote(fName))
@@ -110,16 +112,24 @@ class Metadata:
     def year(self):
         return self.f_year(self)
 
+    def episode(self):
+        return self.f_episode(self)
+
     def interlaced(self):
         return self.f_interlaced(self)
 
     def name(self):
-        """returns the movie name based on this title and year
+        """returns the movie name based on this title year and/or
+        episode
         """
         name = self.title()
         year = self.year()
         if year is not None:
             name = "{} ({})".format(name,year)
+
+        episode = self.episode()
+        if episode is not None:
+            name = "{}.{}".format(name,episode)
 
         return name
 
@@ -160,6 +170,24 @@ def conv(meta, infile):
 
     return outfile
 
+def print_meta(meta, infile):
+    print(meta._metadata)
+    return infile
+
+def subdir(meta, infile):
+    path = meta.title().replace('/','-')
+    try:
+        os.mkdir(path)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise
+
+    outfile = os.path.join(path, infile)
+    os.rename(infile, outfile)
+
+    return outfile
 
 #print(meta._metadata)
 #print(meta._aid)
@@ -187,6 +215,9 @@ if __name__ == "__main__":
     parser.add_argument("--year",
                             help="Set the video year",
                             default=None)
+    parser.add_argument("--episode",
+                            help="Set the episode code (2x01 or s2e1)",
+                            default=None)
     parser.add_argument("--interlaced",
                             help="Mark the video as being interlaced",
                             action='store_true',
@@ -196,6 +227,15 @@ if __name__ == "__main__":
                             default='mkv')
     parser.add_argument("--dry", 
                             help="Show the commands that would be executed",
+                            action='store_true',
+                            default=False)
+    # Actions
+    parser.add_argument("--print-meta", 
+                            help="Print meta-data (for debugging purposes)",
+                            action='store_true',
+                            default=False)
+    parser.add_argument("--subdir", 
+                            help="Put the final file in a sub-directory",
                             action='store_true',
                             default=False)
     parser.add_argument("--no-dump", 
@@ -218,18 +258,25 @@ if __name__ == "__main__":
         meta.f_title = constantly(args.title)
     if args.year is not None:
         meta.f_year = constantly(args.year)
+    if args.episode is not None:
+        meta.f_episode = constantly(args.episode)
     if args.interlaced is not None:
         meta.f_interlaced = constantly(args.interlaced)
 
     actions = []
+    if args.print_meta:
+        actions.append(print_meta)
     if not args.no_dump:
         actions.append(dump)
     if not args.no_conv:
         actions.append(conv)
+    if args.subdir:
+        actions.append(subdir)
 
     infile = meta._fName
     for action in actions:
         infile = action(meta, infile)
+    
 
     print("Final file:", infile)
 
