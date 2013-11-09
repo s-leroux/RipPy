@@ -64,6 +64,35 @@ def rip(meta):
             outfile]
 
     call(cmd)
+    return outfile
+
+def lang_code(XX):
+    {
+        "fr": "fra",
+        "en": "eng",
+    }.get(XX, "")
+
+def conv(meta,infile):
+    cmd = ["avconv",
+            "-i", infile,
+            "-codec:v", "libx264", 
+            "-pre", "slow", 
+            "-b:v", "1.5M", 
+            "-map", "0:v"
+            "-codec:a", "copy"]
+    for lang in ('fr', 'en'):
+        track = meta.audio_track_by_lang(lang)
+        if track is not None:
+            sspec = "a:"+str(track)
+            cmd.expend(["-map", "0:"+sspec,
+                        "-metadata:s:"+sspec,
+                        "language="+lang_code(lang)])
+
+
+    outfile = meta.title() + ".mkv"
+    cmd.expend([outfile])
+    call(cmd)
+
 
 meta = Metadata("dvd://1")
 print(meta._metadata)
