@@ -20,6 +20,8 @@ FFMPEG_VIDEO = """ \\
             -codec:{sspec} libx264 \\
             -preset:{sspec} slow \\
             -b:{sspec} 1.5M"""   
+FFMPEG_VIDEO_DEINTERLACE = """ \\
+            -filter:{sspec} [in]yadif=0:0:0[out]"""
 FFMPEG_AUDIO = """ \\
             -map 0:{sspec} \\
             -codec:{sspec} copy \\
@@ -63,6 +65,7 @@ class Metadata:
         self._out_format = 'mkv'
         self.f_title = title_from_metadata
         self.f_year = constantly(None)
+        self.f_interlaced = constantly(False) # There is probable an heuristic
 
         cmd = MPLAYER_GET_METADATA.format(fname= quote(fName))
 
@@ -91,8 +94,6 @@ class Metadata:
 
             print("OUT:",line.strip())
 
-        # Post-precessing metadata
-
 
     def subtitles_by_lang(self, lang):
         return self._sid.get(lang)
@@ -108,6 +109,9 @@ class Metadata:
 
     def year(self):
         return self.f_year(self)
+
+    def interlaced(self):
+        return self.f_interlaced(self)
 
     def name(self):
         """returns the movie name based on this title and year
@@ -138,6 +142,8 @@ def conv(meta, infile):
     cmd = FFMPEG.format(infile=quote(infile))
 
     cmd += FFMPEG_VIDEO.format(sspec = "v:0")
+    if meta.interlaced():
+        cmd += FFMPEG_VIDEO_DEINTERLACE.format(sspec = "v:0")
 
     for lang in ('fr', 'en'):
         track = meta.audio_track_by_lang(lang)
@@ -181,6 +187,10 @@ if __name__ == "__main__":
     parser.add_argument("--year",
                             help="Set the video year",
                             default=None)
+    parser.add_argument("--interlaced",
+                            help="Mark the video as being interlaced",
+                            action='store_true',
+                            default=None)
     parser.add_argument("--container",
                             help="Set the container format (default mkv)",
                             default='mkv')
@@ -208,6 +218,8 @@ if __name__ == "__main__":
         meta.f_title = constantly(args.title)
     if args.year is not None:
         meta.f_year = constantly(args.year)
+    if args.interlaced is not None:
+        meta.f_interlaced = constantly(args.interlaced)
 
     actions = []
     if not args.no_dump:
