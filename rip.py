@@ -2,8 +2,6 @@ import re
 from itertools import chain
 from subprocess import Popen,call,PIPE
 
-PARTIAL = True
-
 MPLAYER_GET_METADATA = [
   "mplayer", 
     "-vo", "null", 
@@ -64,8 +62,6 @@ def rip(meta):
             meta._fName,
             "-dumpstream", "-dumpfile",
             outfile]
-    if PARTIAL:
-        cmd.extend(["-endpos","10:00"])
 
     call(cmd)
 
