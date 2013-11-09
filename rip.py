@@ -3,24 +3,41 @@ import argparse
 import re
 from itertools import chain
 from subprocess import Popen,call,PIPE
+from pipes import quote
 
-MPLAYER_GET_METADATA = [
-  "mplayer", 
-    "-vo", "null", 
-    "-ao", "null", 
-    "-frames", "0", 
-    "-identify"
-  ]
+MPLAYER_GET_METADATA = """mplayer {fname} \\
+        -vo null -ao null -frames 0 \\
+        -identify """
+
+MPLAYER_DUMP = """mplayer {infile} \\
+            -dumpstream -dumpfile \\
+            {outfile}"""
+
+FFMPEG = """ffmpeg -i {infile} \\
+            """
+FFMPEG_VIDEO = """ \\
+            -map 0:{sspec} \\
+            -codec:{sspec} libx264 \\
+            -preset:{sspec} slow \\
+            -b:{sspec} 1.5M"""   
+FFMPEG_AUDIO = """ \\
+            -map 0:{sspec} \\
+            -codec:{sspec} copy \\
+            -metadata:s:{sspec} language={lang}"""
+FFMPEG_SUBTITLES = FFMPEG_AUDIO
+
 MPLAYER_METADATA_RE = re.compile("ID_(\w+)=(.*)")
 MPLAYER_AUDIO_RE = re.compile(
      "audio stream: (\d+) format: (.+) language: (\w+) aid: (\d+).")
+MPLAYER_SUBTITLES_RE = re.compile(
+     "subtitle \( sid \): (\d+) language: (\w+)")
 
 dry_run = False
 def call_it(cmd):
     if dry_run:
-        print(" ".join(cmd))
+        print(cmd)
     else:
-        call(cmd)
+        call(cmd,shell=True) # !!! this assume proper argument escaping !!!
 
 def title_from_metadata(self):
     """Returns the disk title (based on DVD_VOLUME_ID)
@@ -42,12 +59,16 @@ class Metadata:
         self._fName = fName
         self._metadata = {}
         self._aid = {}
+        self._sid = {}
         self._out_format = 'mkv'
         self.f_title = title_from_metadata
         self.f_year = constantly(None)
 
-        proc = Popen(chain(MPLAYER_GET_METADATA, [fName]),
+        cmd = MPLAYER_GET_METADATA.format(fname= quote(fName))
+
+        proc = Popen(cmd,
                      stdout = PIPE,
+                     shell=True, ### !!! This assume proper argument escaping
                      universal_newlines = True)
         for line in proc.stdout:
             match = MPLAYER_METADATA_RE.match(line)
@@ -59,21 +80,25 @@ class Metadata:
             match = MPLAYER_AUDIO_RE.match(line)
             if match:
                 idx, fmt, lang, aid = match.groups()
-                self._aid[idx] = lang
+                self._aid[lang] = idx
+                continue
+
+            match = MPLAYER_SUBTITLES_RE.match(line)
+            if match:
+                idx, lang = match.groups()
+                self._sid[lang] = idx
                 continue
 
             print("OUT:",line.strip())
 
         # Post-precessing metadata
 
-                
+
+    def subtitles_by_lang(self, lang):
+        return self._sid.get(lang)
 
     def audio_track_by_lang(self, lang):
-        for idx, l in self._aid.items():
-            if lang == l:
-                return idx
-
-        return None
+        return self._aid.get(lang)
 
     def audio_tracks(self):
         return self._aid
@@ -97,12 +122,9 @@ class Metadata:
 def dump(meta, infile):
     outfile = meta.name() + ".vob"
 
-    cmd = ["mplayer",
-            infile,
-            "-dumpstream", "-dumpfile",
-            outfile]
+    call_it(MPLAYER_DUMP.format(infile = quote(infile),
+                                outfile = quote(outfile)))
 
-    call_it(cmd)
     return outfile
 
 def lang_code(XX):
@@ -113,25 +135,22 @@ def lang_code(XX):
 
 def conv(meta, infile):
     outfile = meta.name() + ".mkv"
-    cmd = ["avconv",
-            "-i", infile,
-            "-codec:v", "libx264", 
-            "-pre", "slow", 
-            "-b:v", "1.5M", 
-            "-map", "0:v",
-            "-codec:a", "copy"]
+    cmd = FFMPEG.format(infile=quote(infile))
+
+    cmd += FFMPEG_VIDEO.format(sspec = "v:0")
+
     for lang in ('fr', 'en'):
         track = meta.audio_track_by_lang(lang)
         if track is not None:
-            sspec = "a:"+str(track)
-            cmd.extend(["-map", "0:"+sspec,
-                        "-metadata:s:"+sspec,
-                        "language="+lang_code(lang)])
+            cmd += FFMPEG_AUDIO.format(sspec = "a:"+str(track),
+                                        lang = lang_code(lang))
 
-
-    outfile = meta.name() + ".mkv"
-    cmd.extend([outfile])
-    call_it(cmd)
+    for lang in ('fr', 'en'):
+        track = meta.subtitles_by_lang(lang)
+        if track is not None:
+            cmd += FFMPEG_SUBTITLES.format(sspec = "s:"+str(track),
+                                        lang = lang_code(lang))
+    call_it(" ".join((cmd, quote(outfile))))
 
     return outfile
 

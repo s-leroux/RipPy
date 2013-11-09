@@ -1,4 +1,4 @@
 RipPy
 =====
 
-Python wrapper arround mplayer and avconv to ease DVD ripping
+Python wrapper arround mplayer and ffmpeg to ease DVD ripping
