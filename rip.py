@@ -5,6 +5,7 @@ import os, os.path
 from itertools import chain
 from subprocess import Popen,call,PIPE
 from pipes import quote
+from io import StringIO
 
 MPLAYER_GET_METADATA = """mplayer {fname} \\
         -vo null -ao null -frames 0 \\
@@ -133,11 +134,12 @@ class Metadata:
 
         return name
 
-def dump(meta, infile):
+def dump(meta, infile, script):
     outfile = meta.name() + ".vob"
 
-    call_it(MPLAYER_DUMP.format(infile = quote(infile),
-                                outfile = quote(outfile)))
+    print(MPLAYER_DUMP.format(infile = quote(infile),
+                              outfile = quote(outfile)),
+          file=script)
 
     return outfile
 
@@ -147,7 +149,7 @@ def lang_code(XX):
         "en": "eng",
     }.get(XX, "")
 
-def conv(meta, infile):
+def conv(meta, infile, script):
     outfile = meta.name() + ".mkv"
     cmd = FFMPEG.format(infile=quote(infile))
 
@@ -166,26 +168,24 @@ def conv(meta, infile):
         if track is not None:
             cmd += FFMPEG_SUBTITLES.format(sspec = "s:"+str(track),
                                         lang = lang_code(lang))
-    call_it(" ".join((cmd, quote(outfile))))
+    print(" ".join((cmd, quote(outfile))),
+          file=script)
 
     return outfile
 
-def print_meta(meta, infile):
+def print_meta(meta, infile, script):
     print(meta._metadata)
     return infile
 
-def subdir(meta, infile):
+def subdir(meta, infile, script):
     path = meta.title().replace('/','-')
-    try:
-        os.mkdir(path)
-    except OSError as exc:
-        if exc.errno == errno.EEXIST and os.path.isdir(path):
-            pass
-        else:
-            raise
-
     outfile = os.path.join(path, infile)
-    os.rename(infile, outfile)
+
+    print("mkdir -p -- {path} || test -d {path}".format(path=quote(path)),
+          file=script)
+    print("mv -- {infile} {outfile}".format(infile=quote(infile),
+                                            outfile=quote(outfile)),
+           file=script)
 
     return outfile
 
@@ -248,7 +248,6 @@ if __name__ == "__main__":
                             default=False)
 
     args = parser.parse_args()
-    dry_run = args.dry
 
     print(args)
 
@@ -274,10 +273,17 @@ if __name__ == "__main__":
         actions.append(subdir)
 
     infile = meta._fName
-    for action in actions:
-        infile = action(meta, infile)
-    
+    script = StringIO()
+    script.write("#!/bin/bash\n");
+    script.write("set -e\n");
 
-    print("Final file:", infile)
+    for action in actions:
+        infile = action(meta, infile, script)
+
+
+    if args.dry:
+        print(script.getvalue())
+    else:
+        call(script.getvalue(),shell=True)
 
 
