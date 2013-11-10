@@ -15,8 +15,7 @@ MPLAYER_DUMP = """mplayer {infile} \\
             -dumpstream -dumpfile \\
             {outfile}"""
 
-FFMPEG = """ffmpeg -y -i {infile} \\
-            """
+FFMPEG = """ffmpeg -y -i {infile}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{sspec} \\
             -codec:{sspec} libx264 \\
@@ -43,12 +42,15 @@ def call_it(cmd):
     else:
         call(cmd,shell=True) # !!! this assume proper argument escaping !!!
 
-def title_from_metadata(self):
+def volume_from_metadata(self):
     """Returns the disk title (based on DVD_VOLUME_ID)
     """
     vid = self._metadata["DVD_VOLUME_ID"]
-    vtitle = vid if vid else "NO_NAME"
-    return vtitle.replace('_',' ').title()
+    volume = vid if vid else "NO_NAME"
+    return volume.replace('_',' ').title()
+
+def title_from_volume(self):
+    return self.volume()
 
 def constantly(value):
     """Generate a fuction the returns a constant value
@@ -65,7 +67,8 @@ class Metadata:
         self._aid = {}
         self._sid = {}
         self._out_format = 'mkv'
-        self.f_title = title_from_metadata
+        self.f_volume = volume_from_metadata
+        self.f_title = title_from_volume
         self.f_year = constantly(None)
         self.f_episode = constantly(None)
         self.f_interlaced = constantly(False) # There is probable an heuristic
@@ -107,6 +110,9 @@ class Metadata:
     def audio_tracks(self):
         return self._aid
 
+    def volume(self):
+        return self.f_volume(self)
+
     def title(self):
         return self.f_title(self)
 
@@ -120,22 +126,25 @@ class Metadata:
         return self.f_interlaced(self)
 
     def name(self):
-        """returns the movie name based on this title year and/or
-        episode
+        """returns the movie name as a tupple (volume, title)
+        based on its volume, title, year and/or episode
         """
-        name = self.title()
+        volume = self.volume()
+        title = self.title()
+
         year = self.year()
         if year is not None:
-            name = "{} ({})".format(name,year)
+            volume = "{} ({})".format(volume,year)
 
         episode = self.episode()
         if episode is not None:
-            name = "{}.{}".format(name,episode)
+            title = "{}.{}".format(title,episode)
 
-        return name
+        return (volume, title)
 
 def dump(meta, infile, script):
-    outfile = meta.name() + ".vob"
+    _, title = meta.name()
+    outfile = title.replace('/','-') + ".vob"
 
     print(MPLAYER_DUMP.format(infile = quote(infile),
                               outfile = quote(outfile)),
@@ -150,7 +159,9 @@ def lang_code(XX):
     }.get(XX, "")
 
 def conv(meta, infile, script):
-    outfile = meta.name() + ".mkv"
+    title, _ = os.path.splitext(infile)
+
+    outfile = title + ".mkv"
     cmd = FFMPEG.format(infile=quote(infile))
 
     cmd += FFMPEG_VIDEO.format(sspec = "v:0")
@@ -178,7 +189,9 @@ def print_meta(meta, infile, script):
     return infile
 
 def subdir(meta, infile, script):
-    path = meta.title().replace('/','-')
+    volume, _ = meta.name()
+
+    path = volume.replace('/','-')
     outfile = os.path.join(path, infile)
 
     print("mkdir -p -- {path} || test -d {path}".format(path=quote(path)),
@@ -209,6 +222,9 @@ if __name__ == "__main__":
                             help="The video source to rip",
                             nargs='?',
                             default="dvd://1")
+    parser.add_argument("--volume",
+                            help="Set the disk volume title",
+                            default=None)
     parser.add_argument("--title",
                             help="Set the video title",
                             default=None)
@@ -253,6 +269,8 @@ if __name__ == "__main__":
 
     meta = Metadata(args.infile)
     meta._out_format = args.container
+    if args.volume is not None:
+        meta.f_volume = constantly(args.volume)
     if args.title is not None:
         meta.f_title = constantly(args.title)
     if args.year is not None:
