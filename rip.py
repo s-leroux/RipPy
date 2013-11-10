@@ -7,15 +7,24 @@ from subprocess import Popen,call,PIPE
 from pipes import quote
 from io import StringIO
 
+SCRIPT_HEADER = """#!/bin/bash
+set -e
+
+MPLAYER={mplayer}
+FFMPEG={ffmpeg}
+                
+"""
+
+
 MPLAYER_GET_METADATA = """mplayer {fname} \\
         -vo null -ao null -frames 0 \\
         -identify """
 
-MPLAYER_DUMP = """mplayer {infile} \\
+MPLAYER_DUMP = """$MPLAYER {infile} \\
             -dumpstream -dumpfile \\
             {outfile}"""
 
-FFMPEG = """ffmpeg -y -i {infile}"""
+FFMPEG = """$FFMPEG -y -i {infile}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{sspec} \\
             -codec:{sspec} libx264 \\
@@ -254,14 +263,16 @@ if __name__ == "__main__":
                             help="Put the final file in a sub-directory",
                             action='store_true',
                             default=False)
-    parser.add_argument("--no-dump", 
+    parser.add_argument("--skip-dump", 
                             help="Don't dump (i.e.: copy/rip) the source file",
-                            action='store_true',
-                            default=False)
-    parser.add_argument("--no-conv", 
+                            action='store_const',
+                            const='echo mplayer',default='mplayer',
+                            dest='mplayer')
+    parser.add_argument("--skip-conv", 
                             help="Don't convert (i.e.:re-encode) the video stream",
-                            action='store_true',
-                            default=False)
+                            action='store_const',
+                            const='echo ffmpeg',default='ffmpeg',
+                            dest='ffmpeg')
 
     args = parser.parse_args()
 
@@ -283,17 +294,16 @@ if __name__ == "__main__":
     actions = []
     if args.print_meta:
         actions.append(print_meta)
-    if not args.no_dump:
-        actions.append(dump)
-    if not args.no_conv:
-        actions.append(conv)
+    actions.append(dump)
+    actions.append(conv)
     if args.subdir:
         actions.append(subdir)
 
     infile = meta._fName
     script = StringIO()
-    script.write("#!/bin/bash\n");
-    script.write("set -e\n");
+    print(SCRIPT_HEADER.format(ffmpeg = quote(args.ffmpeg),
+                               mplayer = quote(args.mplayer)),
+          file=script)
 
     for action in actions:
         infile = action(meta, infile, script)
