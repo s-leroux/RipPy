@@ -26,16 +26,16 @@ MPLAYER_DUMP = """$MPLAYER {infile} \\
 
 FFMPEG = """$FFMPEG -y -i {infile}"""
 FFMPEG_VIDEO = """ \\
-            -map 0:{sspec} \\
-            -codec:{sspec} libx264 \\
-            -preset:{sspec} slow \\
-            -b:{sspec} 1.5M"""   
+            -map 0:{ispec} \\
+            -codec:{ospec} libx264 \\
+            -preset:{ospec} slow \\
+            -b:{ospec} 1.5M"""   
 FFMPEG_VIDEO_DEINTERLACE = """ \\
-            -filter:{sspec} [in]yadif=0:0:0[out]"""
+            -filter:{ospec} [in]yadif=0:0:0[out]"""
 FFMPEG_AUDIO = """ \\
-            -map 0:{sspec} \\
-            -codec:{sspec} copy \\
-            -metadata:s:{sspec} language={lang}"""
+            -map 0:{ispec} \\
+            -codec:{ospec} copy \\
+            -metadata:s:{ospec} language={lang}"""
 FFMPEG_SUBTITLES = FFMPEG_AUDIO
 
 MPLAYER_METADATA_RE = re.compile("ID_(\w+)=(.*)")
@@ -173,21 +173,27 @@ def conv(meta, infile, script):
     outfile = title + ".mkv"
     cmd = FFMPEG.format(infile=quote(infile))
 
-    cmd += FFMPEG_VIDEO.format(sspec = "v:0")
+    cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0")
     if meta.interlaced():
-        cmd += FFMPEG_VIDEO_DEINTERLACE.format(sspec = "v:0")
+        cmd += FFMPEG_VIDEO_DEINTERLACE.format(sspec="v:0", ospec="v:0")
 
+    aid = 0
     for lang in ('fr', 'en'):
         track = meta.audio_track_by_lang(lang)
         if track is not None:
-            cmd += FFMPEG_AUDIO.format(sspec = "a:"+str(track),
-                                        lang = lang_code(lang))
+            cmd += FFMPEG_AUDIO.format(ispec = "a:"+str(track),
+                                       ospec = "a:"+str(aid),
+                                       lang = lang_code(lang))
+            aid += 1
 
+    sid = 0
     for lang in ('fr', 'en'):
         track = meta.subtitles_by_lang(lang)
         if track is not None:
-            cmd += FFMPEG_SUBTITLES.format(sspec = "s:"+str(track),
+            cmd += FFMPEG_SUBTITLES.format(ispec = "s:"+str(track),
+                                        ospec = "a:"+str(sid),
                                         lang = lang_code(lang))
+            sid += 1
     print(" ".join((cmd, quote(outfile))),
           file=script)
 
