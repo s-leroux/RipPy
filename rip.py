@@ -24,7 +24,9 @@ MPLAYER_DUMP = """$MPLAYER {infile} \\
             -dumpstream -dumpfile \\
             {outfile}"""
 
-FFMPEG = """$FFMPEG -y -i {infile}"""
+FFMPEG = """$FFMPEG -y  \\
+            -probesize {psize} -analyzeduration {aduration} \\
+            -i {infile}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
             -codec:{ospec} libx264 \\
@@ -61,6 +63,9 @@ def volume_from_metadata(self):
 def title_from_volume(self):
     return self.volume()
 
+def duration_from_probesize(self):
+    return self.probesize()//2
+
 def constantly(value):
     """Generate a fuction the returns a constant value
     """
@@ -81,6 +86,8 @@ class Metadata:
         self.f_year = constantly(None)
         self.f_episode = constantly(None)
         self.f_interlaced = constantly(False) # There is probable an heuristic
+        self.f_probesize = constantly(5)
+        self.f_analyzeduration = duration_from_probesize
 
         cmd = MPLAYER_GET_METADATA.format(fname= quote(fName))
 
@@ -134,6 +141,12 @@ class Metadata:
     def interlaced(self):
         return self.f_interlaced(self)
 
+    def probesize(self):
+        return self.f_probesize(self)
+
+    def analyzeduration(self):
+        return self.f_analyzeduration(self)
+
     def name(self):
         """returns the movie name as a tupple (volume, title)
         based on its volume, title, year and/or episode
@@ -171,7 +184,9 @@ def conv(meta, infile, script):
     title, _ = os.path.splitext(infile)
 
     outfile = title + ".mkv"
-    cmd = FFMPEG.format(infile=quote(infile))
+    cmd = FFMPEG.format(infile=quote(infile),
+                        psize=meta.probesize() * 1000000,
+                        aduration=meta.analyzeduration() * 1000000)
 
     cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0")
     if meta.interlaced():
@@ -191,7 +206,7 @@ def conv(meta, infile, script):
         track = meta.subtitles_by_lang(lang)
         if track is not None:
             cmd += FFMPEG_SUBTITLES.format(ispec = "s:"+str(track),
-                                        ospec = "a:"+str(sid),
+                                        ospec = "s:"+str(sid),
                                         lang = lang_code(lang))
             sid += 1
     print(" ".join((cmd, quote(outfile))),
@@ -253,6 +268,10 @@ if __name__ == "__main__":
                             help="Mark the video as being interlaced",
                             action='store_true',
                             default=None)
+    parser.add_argument("--probesize",
+                            help="Set the probesize in Mframes (x1000000)",
+                            type=int,
+                            default=None)
     parser.add_argument("--container",
                             help="Set the container format (default mkv)",
                             default='mkv')
@@ -296,6 +315,8 @@ if __name__ == "__main__":
         meta.f_episode = constantly(args.episode)
     if args.interlaced is not None:
         meta.f_interlaced = constantly(args.interlaced)
+    if args.probesize is not None:
+        meta.f_probesize = constantly(args.probesize)
 
     actions = []
     if args.print_meta:
