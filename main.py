@@ -40,7 +40,13 @@ FFMPEG_AUDIO = """ \\
             -metadata:s:{ospec} language={lang}"""
 FFMPEG_SUBTITLES = FFMPEG_AUDIO
 
+MKVPROPEDIT="""mkvpropedit {fname} \\
+                    --edit track:{st_type}{st_out_idx} \\
+                    --set flag-default=0"""
+
 MPLAYER_METADATA_RE = re.compile("ID_(\w+)=(.*)")
+MPLAYER_VIDEO_RE = re.compile(
+     "ID_VIDEO_ID=(\d+)")
 MPLAYER_AUDIO_RE = re.compile(
      "audio stream: (\d+) format: (.+) language: (\w+) aid: (\d+).")
 MPLAYER_SUBTITLES_RE = re.compile(
@@ -74,13 +80,15 @@ def constantly(value):
 
     return _const
 
+import rip.db
+
 class Metadata:
     def __init__(self, fName):
         self._fName = fName
         self._metadata = {}
-        self._aid = {}
-        self._sid = {}
         self._out_format = 'mkv'
+        self._lcodes = ( 'fr', 'en' )
+        self._streams = rip.db.DB()
         self.f_volume = volume_from_metadata
         self.f_title = title_from_volume
         self.f_year = constantly(None)
@@ -100,31 +108,33 @@ class Metadata:
             if match:
                 key, value = match.group(1,2)
                 self._metadata[key] = value
+                # continue
+
+            match = MPLAYER_VIDEO_RE.match(line)
+            if match:
+                idx = match.groups()
+                self._streams.append(st_type='v',
+                                     st_in_idx=idx)
                 continue
 
             match = MPLAYER_AUDIO_RE.match(line)
             if match:
                 idx, fmt, lang, aid = match.groups()
-                self._aid[lang] = idx
+                self._streams.append(st_type='a',
+                                     st_lang=lang,
+                                     st_in_idx=idx)
                 continue
 
             match = MPLAYER_SUBTITLES_RE.match(line)
             if match:
                 idx, lang = match.groups()
-                self._sid[lang] = idx
+                self._streams.append(st_type='s',
+                                     st_lang=lang,
+                                     st_in_idx=idx)
                 continue
 
             print("OUT:",line.strip())
 
-
-    def subtitles_by_lang(self, lang):
-        return self._sid.get(lang)
-
-    def audio_track_by_lang(self, lang):
-        return self._aid.get(lang)
-
-    def audio_tracks(self):
-        return self._aid
 
     def volume(self):
         return self.f_volume(self)
@@ -174,41 +184,224 @@ def dump(meta, infile, script):
 
     return outfile
 
-def lang_code(XX):
+def iso639_1_to_iso639_2(XX):
     return {
-        "fr": "fra",
-        "en": "eng",
+        'aa': 'aar', # Afar
+        'ab': 'abk', # Abkhazian
+        'ae': 'ave', # Avestan
+        'af': 'afr', # Afrikaans
+        'ak': 'aka', # Akan
+        'am': 'amh', # Amharic
+        'an': 'arg', # Aragonese
+        'ar': 'ara', # Arabic
+        'as': 'asm', # Assamese
+        'av': 'ava', # Avaric
+        'ay': 'aym', # Aymara
+        'az': 'aze', # Azerbaijani
+        'ba': 'bak', # Bashkir
+        'be': 'bel', # Belarusian
+        'bg': 'bul', # Bulgarian
+        'bh': 'bih', # Bihari languages
+        'bi': 'bis', # Bislama
+        'bm': 'bam', # Bambara
+        'bn': 'ben', # Bengali
+        'bo': 'tib', # Tibetan
+        'br': 'bre', # Breton
+        'bs': 'bos', # Bosnian
+        'ca': 'cat', # Catalan; Valencian
+        'ce': 'che', # Chechen
+        'ch': 'cha', # Chamorro
+        'co': 'cos', # Corsican
+        'cr': 'cre', # Cree
+        'cs': 'cze', # Czech
+        'cu': 'chu', # Church Slavic; Old Slavonic; Church Slavonic; Old Bulgarian; Old Church Slavonic
+        'cv': 'chv', # Chuvash
+        'cy': 'wel', # Welsh
+        'da': 'dan', # Danish
+        'de': 'ger', # German
+        'dv': 'div', # Divehi; Dhivehi; Maldivian
+        'dz': 'dzo', # Dzongkha
+        'ee': 'ewe', # Ewe
+        'el': 'gre', # Greek, Modern (1453-)
+        'en': 'eng', # English
+        'eo': 'epo', # Esperanto
+        'es': 'spa', # Spanish; Castillan
+        'et': 'est', # Estonian
+        'eu': 'baq', # Basque
+        'fa': 'per', # Persian
+        'ff': 'ful', # Fulah
+        'fi': 'fin', # Finnish
+        'fj': 'fij', # Fijian
+        'fo': 'fao', # Faroese
+        'fr': 'fre', # French
+        'fy': 'fry', # Western Frisian
+        'ga': 'gle', # Irish
+        'gd': 'gla', # Gaelic; Scottish Gaelic
+        'gl': 'glg', # Galician
+        'gn': 'grn', # Guarani
+        'gu': 'guj', # Gujarati
+        'gv': 'glv', # Manx
+        'ha': 'hau', # Hausa
+        'he': 'heb', # Hebrew
+        'hi': 'hin', # Hindi
+        'ho': 'hmo', # Hiri Motu
+        'hr': 'hrv', # Croatian
+        'ht': 'hat', # Haitian; Haitian Creole
+        'hu': 'hun', # Hungarian
+        'hy': 'arm', # Armenian
+        'hz': 'her', # Herero
+        'ia': 'ina', # Interlingua (International Auxiliary Language Association)
+        'id': 'ind', # Indonesian
+        'ie': 'ile', # Interlingue; Occidental
+        'ig': 'ibo', # Igbo
+        'ii': 'iii', # Sichuan Yi; Nuosu
+        'ik': 'ipk', # Inupiaq
+        'io': 'ido', # Ido
+        'is': 'ice', # Icelandic
+        'it': 'ita', # Italian
+        'iu': 'iku', # Inuktitut
+        'ja': 'jpn', # Japanese
+        'jv': 'jav', # Javanese
+        'ka': 'geo', # Georgian
+        'kg': 'kon', # Kongo
+        'ki': 'kik', # Kikuyu; Gikuyu
+        'kj': 'kua', # Kuanyama; Kwanyama
+        'kk': 'kaz', # Kazakh
+        'kl': 'kal', # Kalaallisut; Greenlandic
+        'km': 'khm', # Central Khmer
+        'kn': 'kan', # Kannada
+        'ko': 'kor', # Korean
+        'kr': 'kau', # Kanuri
+        'ks': 'kas', # Kashmiri
+        'ku': 'kur', # Kurdish
+        'kv': 'kom', # Komi
+        'kw': 'cor', # Cornish
+        'ky': 'kir', # Kirghiz; Kyrgyz
+        'la': 'lat', # Latin
+        'lb': 'ltz', # Luxembourgish; Letzeburgesch
+        'lg': 'lug', # Ganda
+        'li': 'lim', # Limburgan; Limburger; Limburgish
+        'ln': 'lin', # Lingala
+        'lo': 'lao', # Lao
+        'lt': 'lit', # Lithuanian
+        'lu': 'lub', # Luba-Katanga
+        'lv': 'lav', # Latvian
+        'mg': 'mlg', # Malagasy
+        'mh': 'mah', # Marshallese
+        'mi': 'mao', # Maori
+        'mk': 'mac', # Macedonian
+        'ml': 'mal', # Malayalam
+        'mn': 'mon', # Mongolian
+        'mr': 'mar', # Marathi
+        'ms': 'may', # Malay
+        'mt': 'mlt', # Maltese
+        'my': 'bur', # Burmese
+        'na': 'nau', # Nauru
+        'nb': 'nob', # Bokmål, Norwegian; Norwegian Bokmål
+        'nd': 'nde', # Ndebele, North; North Ndebele
+        'ne': 'nep', # Nepali
+        'ng': 'ndo', # Ndonga
+        'nl': 'dut', # Dutch; Flemish
+        'nn': 'nno', # Norwegian Nynorsk; Nynorsk, Norwegian
+        'no': 'nor', # Norwegian
+        'nr': 'nbl', # Ndebele, South; South Ndebele
+        'nv': 'nav', # Navajo; Navaho
+        'ny': 'nya', # Chichewa; Chewa; Nyanja
+        'oc': 'oci', # Occitan (post 1500)
+        'oj': 'oji', # Ojibwa
+        'om': 'orm', # Oromo
+        'or': 'ori', # Oriya
+        'os': 'oss', # Ossetian; Ossetic
+        'pa': 'pan', # Panjabi; Punjabi
+        'pi': 'pli', # Pali
+        'pl': 'pol', # Polish
+        'ps': 'pus', # Pushto; Pashto
+        'pt': 'por', # Portuguese
+        'qu': 'que', # Quechua
+        'rm': 'roh', # Romansh
+        'rn': 'run', # Rundi
+        'ro': 'rum', # Romanian; Moldavian; Moldovan
+        'ru': 'rus', # Russian
+        'rw': 'kin', # Kinyarwanda
+        'sa': 'san', # Sanskrit
+        'sc': 'srd', # Sardinian
+        'sd': 'snd', # Sindhi
+        'se': 'sme', # Northern Sami
+        'sg': 'sag', # Sango
+        'si': 'sin', # Sinhala; Sinhalese
+        'sk': 'slo', # Slovak
+        'sl': 'slv', # Slovenian
+        'sm': 'smo', # Samoan
+        'sn': 'sna', # Shona
+        'so': 'som', # Somali
+        'sq': 'alb', # Albanian
+        'sr': 'srp', # Serbian
+        'ss': 'ssw', # Swati
+        'st': 'sot', # Sotho, Southern
+        'su': 'sun', # Sundanese
+        'sv': 'swe', # Swedish
+        'sw': 'swa', # Swahili
+        'ta': 'tam', # Tamil
+        'te': 'tel', # Telugu
+        'tg': 'tgk', # Tajik
+        'th': 'tha', # Thai
+        'ti': 'tir', # Tigrinya
+        'tk': 'tuk', # Turkmen
+        'tl': 'tgl', # Tagalog
+        'tn': 'tsn', # Tswana
+        'to': 'ton', # Tonga (Tonga Islands)
+        'tr': 'tur', # Turkish
+        'ts': 'tso', # Tsonga
+        'tt': 'tat', # Tatar
+        'tw': 'twi', # Twi
+        'ty': 'tah', # Tahitian
+        'ug': 'uig', # Uighur; Uyghur
+        'uk': 'ukr', # Ukrainian
+        'ur': 'urd', # Urdu
+        'uz': 'uzb', # Uzbek
+        've': 'ven', # Venda
+        'vi': 'vie', # Vietnamese
+        'vo': 'vol', # Volapük
+        'wa': 'wln', # Walloon
+        'wo': 'wol', # Wolof
+        'xh': 'xho', # Xhosa
+        'yi': 'yid', # Yiddish
+        'yo': 'yor', # Yoruba
+        'za': 'zha', # Zhuang; Chuang
+        'zh': 'chi', # Chinese
+        'zu': 'zul', # Zulu
     }.get(XX, "")
 
 def conv(meta, infile, script):
     title, _ = os.path.splitext(infile)
 
-    outfile = title + ".mkv"
+    outfile = ".".join((title, meta._out_format))
     cmd = FFMPEG.format(infile=quote(infile),
                         psize=meta.probesize() * 1000000,
                         aduration=meta.analyzeduration() * 1000000)
 
     cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0")
+    print([i for i in meta._streams])
+    meta._streams.get(st_type='v')['st_out_idx'] = 0
+
     if meta.interlaced():
         cmd += FFMPEG_VIDEO_DEINTERLACE.format(sspec="v:0", ospec="v:0")
 
     aid = 0
-    for lang in ('fr', 'en'):
-        track = meta.audio_track_by_lang(lang)
-        if track is not None:
-            cmd += FFMPEG_AUDIO.format(ispec = "a:"+str(track),
+    for stream in meta._streams.having(st_type='a').filter('st_lang', meta._lcodes):
+        stream['st_out_idx'] = aid
+        cmd += FFMPEG_AUDIO.format(ispec = "a:"+str(stream['st_in_idx']),
                                        ospec = "a:"+str(aid),
-                                       lang = lang_code(lang))
-            aid += 1
+                                       lang = iso639_1_to_iso639_2(stream['st_lang']))
+        aid += 1
 
     sid = 0
-    for lang in ('fr', 'en'):
-        track = meta.subtitles_by_lang(lang)
-        if track is not None:
-            cmd += FFMPEG_SUBTITLES.format(ispec = "s:"+str(track),
-                                        ospec = "s:"+str(sid),
-                                        lang = lang_code(lang))
-            sid += 1
+    for stream in meta._streams.having(st_type='s').filter('st_lang', meta._lcodes):
+        stream['st_out_idx'] = sid
+        cmd += FFMPEG_SUBTITLES.format(ispec = "s:"+str(stream['st_in_idx']),
+                                       ospec = "s:"+str(sid),
+                                       lang = iso639_1_to_iso639_2(stream['st_lang']))
+        sid += 1
     print(" ".join((cmd, quote(outfile))),
           file=script)
 
@@ -216,6 +409,15 @@ def conv(meta, infile, script):
 
 def print_meta(meta, infile, script):
     print(meta._metadata)
+    return infile
+
+def set_defaults(meta, infile, script):
+    # XXX should check if this is really a Matroska?
+    for stream in meta._streams.having(st_type='s'):
+        print(MKVPROPEDIT.format(fname=quote(infile),
+                                st_type=stream['st_type'],
+                                st_out_idx=stream['st_out_idx']+1),
+              file=script)
     return infile
 
 def subdir(meta, infile, script):
@@ -264,6 +466,9 @@ if __name__ == "__main__":
     parser.add_argument("--episode",
                             help="Set the episode code (2x01 or s2e1)",
                             default=None)
+    parser.add_argument("--lang",
+                            help="Langage code for tracks (audio+subtitles). Default 'fr,en'",
+                            default='fr,en')
     parser.add_argument("--interlaced",
                             help="Mark the video as being interlaced",
                             action='store_true',
@@ -305,6 +510,8 @@ if __name__ == "__main__":
 
     meta = Metadata(args.infile)
     meta._out_format = args.container
+    meta._lcodes = args.lang.split(',')
+
     if args.volume is not None:
         meta.f_volume = constantly(args.volume)
     if args.title is not None:
@@ -323,6 +530,7 @@ if __name__ == "__main__":
         actions.append(print_meta)
     actions.append(dump)
     actions.append(conv)
+    actions.append(set_defaults)
     if args.subdir:
         actions.append(subdir)
 
