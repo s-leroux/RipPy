@@ -12,7 +12,7 @@ class DBIter:
         r = [i for i in self._it] # !!! realyze lazy seq.
         return DBIter((item for value in values 
                          for item in r
-                             if item[attr] == value))
+                             if item.get(attr) == value))
 
     def having(self, **kwargs):
         result = self
@@ -20,6 +20,14 @@ class DBIter:
             result=result.filter(key, (value,))
 
         return result
+
+    def find(self, **kwargs):
+        result = self.having(**kwargs)
+
+        try:
+            return next(result)
+        except StopIteration:
+            return dict(**kwargs)
 
     def get(self, **kwargs):
         result = self.having(**kwargs)
@@ -50,3 +58,6 @@ class DB:
 
     def get(self, **kwargs):
         return self.__iter__().get(**kwargs)
+
+    def find(self, **kwargs):
+        return self.__iter__().find(**kwargs)

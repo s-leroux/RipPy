@@ -7,31 +7,29 @@ from subprocess import Popen,call,PIPE
 from pipes import quote
 from io import StringIO
 
-SCRIPT_HEADER = """#!/bin/bash
-set -e
-
-MPLAYER={mplayer}
-FFMPEG={ffmpeg}
-                
-"""
-
 
 MPLAYER_GET_METADATA = """mplayer {fname} \\
         -vo null -ao null -frames 0 \\
         -identify """
 
-MPLAYER_DUMP = """$MPLAYER {infile} \\
+MPLAYER_DUMP = """mplayer {infile} \\
             -dumpstream -dumpfile \\
             {outfile}"""
 
-FFMPEG = """$FFMPEG -y  \\
+FFPROBE_STREAM_INFO = """ffprobe \\
+            -probesize {psize} -analyzeduration {aduration} \\
+            -show_format -show_streams \\
+            -of csv \\
+            -i {fname}"""
+
+FFMPEG = """ffmpeg -y  \\
             -probesize {psize} -analyzeduration {aduration} \\
             -i {infile}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
             -codec:{ospec} libx264 \\
             -preset:{ospec} slow \\
-            -b:{ospec} 1.5M"""   
+            -crf:{ospec} 20"""
 FFMPEG_VIDEO_DEINTERLACE = """ \\
             -filter:{ospec} [in]yadif=0:0:0[out]"""
 FFMPEG_AUDIO = """ \\
@@ -57,6 +55,8 @@ def call_it(cmd):
     if dry_run:
         print(cmd)
     else:
+        print("RUNNING:")
+        print(cmd)
         call(cmd,shell=True) # !!! this assume proper argument escaping !!!
 
 def volume_from_metadata(self):
@@ -122,15 +122,18 @@ class Metadata:
                 idx, fmt, lang, aid = match.groups()
                 self._streams.append(st_type='a',
                                      st_lang=lang,
-                                     st_in_idx=idx)
+                                    # st_in_idx=idx, # <-- not a good idea
+                                    # to store "streeam index" from
+                                    # mplayer
+                                     st_id=int(aid))
                 continue
 
             match = MPLAYER_SUBTITLES_RE.match(line)
             if match:
-                idx, lang = match.groups()
+                sid, lang = match.groups()
                 self._streams.append(st_type='s',
                                      st_lang=lang,
-                                     st_in_idx=idx)
+                                     st_id=0x20+int(sid))
                 continue
 
             print("OUT:",line.strip())
@@ -174,13 +177,12 @@ class Metadata:
 
         return (volume, title)
 
-def dump(meta, infile, script):
+def dump(meta, infile):
     _, title = meta.name()
     outfile = title.replace('/','-') + ".vob"
 
-    print(MPLAYER_DUMP.format(infile = quote(infile),
-                              outfile = quote(outfile)),
-          file=script)
+    call_it(MPLAYER_DUMP.format(infile = quote(infile),
+                                outfile = quote(outfile)))
 
     return outfile
 
@@ -372,7 +374,43 @@ def iso639_1_to_iso639_2(XX):
         'zu': 'zul', # Zulu
     }.get(XX, "")
 
-def conv(meta, infile, script):
+def probe(meta, infile):
+    """Probe a streams and try to match ids with their
+    corresponding index
+    """
+    cmd = FFPROBE_STREAM_INFO.format(fname=quote(infile),
+                        psize=meta.probesize() * 1000000,
+                        aduration=meta.analyzeduration() * 1000000)
+
+    proc = Popen(cmd,
+                 stdout = PIPE,
+                 shell=True, ### !!! This assume proper argument escaping
+                 universal_newlines = True)
+    for line in proc.stdout:
+        fields=line.split(',')
+        if fields[0] != 'stream':
+            continue
+
+        if fields[5] == 'audio':
+            st_type = 'a'
+            st_id = int(fields[19],base=0)
+        elif fields[5] == 'subtitle':
+            st_type = 's'
+            st_id = int(fields[11],base=0)
+        else:
+            continue
+
+        st_in_idx = int(fields[1],base=0)
+
+        print("FOUND stream id {} ({}) as index {}".format(
+                     st_id, st_type, st_in_idx))
+
+        stream = meta._streams.find(st_type=st_type,st_id=st_id)
+        stream['st_in_idx'] = st_in_idx
+
+    return infile
+
+def conv(meta, infile):
     title, _ = os.path.splitext(infile)
 
     outfile = ".".join((title, meta._out_format))
@@ -390,7 +428,7 @@ def conv(meta, infile, script):
     aid = 0
     for stream in meta._streams.having(st_type='a').filter('st_lang', meta._lcodes):
         stream['st_out_idx'] = aid
-        cmd += FFMPEG_AUDIO.format(ispec = "a:"+str(stream['st_in_idx']),
+        cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
                                        ospec = "a:"+str(aid),
                                        lang = iso639_1_to_iso639_2(stream['st_lang']))
         aid += 1
@@ -398,39 +436,36 @@ def conv(meta, infile, script):
     sid = 0
     for stream in meta._streams.having(st_type='s').filter('st_lang', meta._lcodes):
         stream['st_out_idx'] = sid
-        cmd += FFMPEG_SUBTITLES.format(ispec = "s:"+str(stream['st_in_idx']),
+        cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
                                        ospec = "s:"+str(sid),
                                        lang = iso639_1_to_iso639_2(stream['st_lang']))
         sid += 1
-    print(" ".join((cmd, quote(outfile))),
-          file=script)
+    call_it(" ".join((cmd, quote(outfile))))
 
     return outfile
 
-def print_meta(meta, infile, script):
+def print_meta(meta, infile):
     print(meta._metadata)
     return infile
 
-def set_defaults(meta, infile, script):
+def set_defaults(meta, infile):
     # XXX should check if this is really a Matroska?
     for stream in meta._streams.having(st_type='s'):
-        print(MKVPROPEDIT.format(fname=quote(infile),
-                                st_type=stream['st_type'],
-                                st_out_idx=stream['st_out_idx']+1),
-              file=script)
+        call_it(MKVPROPEDIT.format(fname=quote(infile),
+                                   st_type=stream['st_type'],
+                                   st_out_idx=stream['st_out_idx']+1))
+
     return infile
 
-def subdir(meta, infile, script):
+def subdir(meta, infile):
     volume, _ = meta.name()
 
     path = volume.replace('/','-')
     outfile = os.path.join(path, infile)
 
-    print("mkdir -p -- {path} || test -d {path}".format(path=quote(path)),
-          file=script)
-    print("mv -- {infile} {outfile}".format(infile=quote(infile),
-                                            outfile=quote(outfile)),
-           file=script)
+    call_it("mkdir -p -- {path} || test -d {path}".format(path=quote(path)))
+    call_it("mv -- {infile} {outfile}".format(infile=quote(infile),
+                                              outfile=quote(outfile)))
 
     return outfile
 
@@ -529,24 +564,16 @@ if __name__ == "__main__":
     if args.print_meta:
         actions.append(print_meta)
     actions.append(dump)
+    actions.append(probe)
     actions.append(conv)
     actions.append(set_defaults)
     if args.subdir:
         actions.append(subdir)
 
     infile = meta._fName
-    script = StringIO()
-    print(SCRIPT_HEADER.format(ffmpeg = quote(args.ffmpeg),
-                               mplayer = quote(args.mplayer)),
-          file=script)
 
     for action in actions:
-        infile = action(meta, infile, script)
+        infile = action(meta, infile)
 
-
-    if args.dry:
-        print(script.getvalue())
-    else:
-        call(script.getvalue(),shell=True)
 
 
