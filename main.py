@@ -29,6 +29,7 @@ FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
             -codec:{ospec} libx264 \\
             -preset:{ospec} slow \\
+            -tune:{ospec} {tune} \\
             -crf:{ospec} 20"""
 FFMPEG_VIDEO_DEINTERLACE = """ \\
             -filter:{ospec} [in]yadif=0:0:0[out]"""
@@ -418,7 +419,7 @@ def conv(meta, infile):
                         psize=meta.probesize() * 1000000,
                         aduration=meta.analyzeduration() * 1000000)
 
-    cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0")
+    cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0", tune=meta._tune)
     print([i for i in meta._streams])
     meta._streams.get(st_type='v')['st_out_idx'] = 0
 
@@ -451,9 +452,10 @@ def print_meta(meta, infile):
 def set_defaults(meta, infile):
     # XXX should check if this is really a Matroska?
     for stream in meta._streams.having(st_type='s'):
-        call_it(MKVPROPEDIT.format(fname=quote(infile),
-                                   st_type=stream['st_type'],
-                                   st_out_idx=stream['st_out_idx']+1))
+        if 'st_out_idx' in stream:
+            call_it(MKVPROPEDIT.format(fname=quote(infile),
+                                       st_type=stream['st_type'],
+                                       st_out_idx=stream['st_out_idx']+1))
 
     return infile
 
@@ -504,6 +506,9 @@ if __name__ == "__main__":
     parser.add_argument("--lang",
                             help="Langage code for tracks (audio+subtitles). Default 'fr,en'",
                             default='fr,en')
+    parser.add_argument("--tune",
+                            help="Tune for a specific media (default film)",
+                            default="film")
     parser.add_argument("--interlaced",
                             help="Mark the video as being interlaced",
                             action='store_true',
@@ -546,6 +551,7 @@ if __name__ == "__main__":
     meta = Metadata(args.infile)
     meta._out_format = args.container
     meta._lcodes = args.lang.split(',')
+    meta._tune = args.tune
 
     if args.volume is not None:
         meta.f_volume = constantly(args.volume)
