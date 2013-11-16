@@ -183,8 +183,9 @@ def dump(meta, infile):
     _, title = meta.name()
     outfile = title.replace('/','-') + ".vob"
 
-    call_it(MPLAYER_DUMP.format(infile = quote(infile),
-                                outfile = quote(outfile)))
+    if meta._force_dump or not os.path.exists(outfile):
+        call_it(MPLAYER_DUMP.format(infile = quote(infile),
+                                    outfile = quote(outfile)))
 
     return outfile
 
@@ -442,7 +443,9 @@ def conv(meta, infile):
                                        ospec = "s:"+str(sid),
                                        lang = iso639_1_to_iso639_2(stream['st_lang']))
         sid += 1
-    call_it(" ".join((cmd, quote(outfile))))
+
+    if meta._force_conv or not os.path.exists(outfile):
+        call_it(" ".join((cmd, quote(outfile))))
 
     return outfile
 
@@ -534,16 +537,14 @@ if __name__ == "__main__":
                             help="Put the final file in a sub-directory",
                             action='store_true',
                             default=False)
-    parser.add_argument("--skip-dump", 
-                            help="Don't dump (i.e.: copy/rip) the source file",
-                            action='store_const',
-                            const='echo mplayer',default='mplayer',
-                            dest='mplayer')
-    parser.add_argument("--skip-conv", 
-                            help="Don't convert (i.e.:re-encode) the video stream",
-                            action='store_const',
-                            const='echo ffmpeg',default='ffmpeg',
-                            dest='ffmpeg')
+    parser.add_argument("--force-dump", 
+                            help="Force dump (i.e.: copy/rip) even if already done",
+                            action='store_true',
+                            default=False)
+    parser.add_argument("--force-conv", 
+                            help="Force re-encoding",
+                            action='store_true',
+                            default=False)
 
     args = parser.parse_args()
 
@@ -553,6 +554,8 @@ if __name__ == "__main__":
     meta._out_format = args.container
     meta._lcodes = args.lang.split(',')
     meta._tune = args.tune
+    meta._force_dump = args.force_dump
+    meta._force_conv = args.force_conv
 
     if args.volume is not None:
         meta.f_volume = constantly(args.volume)
