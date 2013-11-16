@@ -171,6 +171,7 @@ class Metadata:
         year = self.year()
         if year is not None:
             volume = "{} ({})".format(volume,year)
+            title = "{} ({})".format(title,year)
 
         episode = self.episode()
         if episode is not None:
