@@ -455,19 +455,21 @@ def conv(meta, infile):
 
     aid = 0
     for stream in meta._streams.having(st_type='a').filter('st_lang', meta._lcodes):
-        stream['st_out_idx'] = aid
-        cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
-                                       ospec = "a:"+str(aid),
-                                       lang = iso639_1_to_iso639_2(stream['st_lang']))
-        aid += 1
+        if 'st_in_idx' in stream:
+            stream['st_out_idx'] = aid
+            cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
+                                           ospec = "a:"+str(aid),
+                                           lang = iso639_1_to_iso639_2(stream['st_lang']))
+            aid += 1
 
     sid = 0
     for stream in meta._streams.having(st_type='s').filter('st_lang', meta._lcodes):
-        stream['st_out_idx'] = sid
-        cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
-                                       ospec = "s:"+str(sid),
-                                       lang = iso639_1_to_iso639_2(stream['st_lang']))
-        sid += 1
+        if 'st_in_idx' in stream:
+            stream['st_out_idx'] = sid
+            cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
+                                           ospec = "s:"+str(sid),
+                                           lang = iso639_1_to_iso639_2(stream['st_lang']))
+            sid += 1
 
     if meta._force_conv or not os.path.exists(outfile):
         call_it(" ".join((cmd, quote(outfile))))
