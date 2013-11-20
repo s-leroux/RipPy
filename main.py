@@ -162,26 +162,51 @@ class Metadata:
         return self.f_analyzeduration(self)
 
     def name(self):
-        """returns the movie name as a tupple (volume, title)
-        based on its volume, title, year and/or episode
+        """returns the movie base name either as a single
+        file name or a path, depending on the various options
+        set.
+
+        If volume is set to something different than title
+        or there is an episode number, force subdir.
+
+        Use flat file name otherwise.
         """
         volume = self.volume()
         title = self.title()
-
-        year = self.year()
-        if year is not None:
-            volume = "{} ({})".format(volume,year)
-            title = "{} ({})".format(title,year)
-
         episode = self.episode()
-        if episode is not None:
-            title = "{}.{}".format(title,episode)
+        year = self.year()
 
-        return (volume, title)
+        has_subdir = (volume != title) or (episode is not None)
+
+        if has_subdir:
+            if year is not None:
+                volume = "{} ({})".format(volume, year)
+            if episode is not None:
+                title = "{}.{}".format(title,episode)
+
+            fmt="{volume}/{title}"
+        else:
+            if year is not None:
+                title = "{} ({})".format(title, year)
+
+            fmt="{title}"
+
+        return fmt.format(volume=volume.replace('/','-'),
+                          title=title.replace('/','-'))
+
+def makeBaseDir(filePath):
+    dirs = os.path.dirname(filePath)
+    try:
+        os.makedirs(dirs)
+    except OSError:
+        # ignore (assuming we the leaf directory already exists)
+        # if this is *not* the real issue, later function will fail
+        # anyway
+        pass
 
 def dump(meta, infile):
-    _, title = meta.name()
-    outfile = title.replace('/','-') + ".vob"
+    outfile = meta.name() + ".vob"
+    makeBaseDir(outfile)
 
     if meta._force_dump or not os.path.exists(outfile):
         call_it(MPLAYER_DUMP.format(infile = quote(infile),
@@ -463,17 +488,6 @@ def set_defaults(meta, infile):
 
     return infile
 
-def subdir(meta, infile):
-    volume, _ = meta.name()
-
-    path = volume.replace('/','-')
-    outfile = os.path.join(path, infile)
-
-    call_it("mkdir -p -- {path} || test -d {path}".format(path=quote(path)))
-    call_it("mv -- {infile} {outfile}".format(infile=quote(infile),
-                                              outfile=quote(outfile)))
-
-    return outfile
 
 #print(meta._metadata)
 #print(meta._aid)
@@ -533,10 +547,6 @@ if __name__ == "__main__":
                             help="Print meta-data (for debugging purposes)",
                             action='store_true',
                             default=False)
-    parser.add_argument("--subdir", 
-                            help="Put the final file in a sub-directory",
-                            action='store_true',
-                            default=False)
     parser.add_argument("--force-dump", 
                             help="Force dump (i.e.: copy/rip) even if already done",
                             action='store_true',
@@ -577,8 +587,6 @@ if __name__ == "__main__":
     actions.append(probe)
     actions.append(conv)
     actions.append(set_defaults)
-    if args.subdir:
-        actions.append(subdir)
 
     infile = meta._fName
 
