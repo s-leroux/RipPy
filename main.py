@@ -20,6 +20,7 @@ FFPROBE_STREAM_INFO = """ffprobe \\
             -probesize {psize} -analyzeduration {aduration} \\
             -show_format -show_streams \\
             -of csv \\
+            -show_entries 'stream=index,codec_type,id' \\
             -i {fname}"""
 
 FFMPEG = """ffmpeg -y  \\
@@ -39,9 +40,11 @@ FFMPEG_AUDIO = """ \\
             -metadata:s:{ospec} language={lang}"""
 FFMPEG_SUBTITLES = FFMPEG_AUDIO
 
-MKVPROPEDIT="""mkvpropedit {fname} \\
-                    --edit track:{st_type}{st_out_idx} \\
-                    --set flag-default=0"""
+MKVPROPEDIT="""mkvpropedit {fname} """
+MKVPROPEDIT_INFO=""" \\
+                    --edit info --set {key}={value}"""
+MKVPROPEDIT_TRACK=""" \\
+                    --edit track:{st_type}{st_out_idx} --set {key}={value}"""
 
 MPLAYER_METADATA_RE = re.compile("ID_(\w+)=(.*)")
 MPLAYER_VIDEO_RE = re.compile(
@@ -415,20 +418,20 @@ def probe(meta, infile):
                  shell=True, ### !!! This assume proper argument escaping
                  universal_newlines = True)
     for line in proc.stdout:
-        fields=line.split(',')
-        if fields[0] != 'stream':
+        header, index, codec_type, *tail = fields=line.split(',')
+        if header != 'stream':
             continue
 
-        if fields[5] == 'audio':
+        if codec_type == 'audio':
             st_type = 'a'
-            st_id = int(fields[19],base=0)
-        elif fields[5] == 'subtitle':
+            st_id = int(tail[0],base=0)
+        elif codec_type == 'subtitle':
             st_type = 's'
-            st_id = int(fields[11],base=0)
+            st_id = int(tail[0],base=0)
         else:
             continue
 
-        st_in_idx = int(fields[1],base=0)
+        st_in_idx = int(index,base=0)
 
         print("FOUND stream id {} ({}) as index {}".format(
                      st_id, st_type, st_in_idx))
@@ -482,11 +485,17 @@ def print_meta(meta, infile):
 
 def set_defaults(meta, infile):
     # XXX should check if this is really a Matroska?
+    cmd = MKVPROPEDIT.format(fname=quote(infile))
+    cmd += MKVPROPEDIT_INFO.format(key='title', value=quote(meta.title()))
+
     for stream in meta._streams.having(st_type='s'):
         if 'st_out_idx' in stream:
-            call_it(MKVPROPEDIT.format(fname=quote(infile),
-                                       st_type=stream['st_type'],
-                                       st_out_idx=stream['st_out_idx']+1))
+            cmd += MKVPROPEDIT_TRACK.format(st_type=stream['st_type'],
+                                          st_out_idx=stream['st_out_idx']+1,
+                                          key='flag-default',
+                                          value = '0')
+
+    call_it(cmd)
 
     return infile
 
