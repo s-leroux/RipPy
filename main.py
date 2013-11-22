@@ -9,10 +9,12 @@ from io import StringIO
 
 
 MPLAYER_GET_METADATA = """mplayer {fname} \\
+        -dvd-device {dvd} \\
         -vo null -ao null -frames 0 \\
         -identify """
 
 MPLAYER_DUMP = """mplayer {infile} \\
+        -dvd-device {dvd} \\
             -dumpstream -dumpfile \\
             {outfile}"""
 
@@ -101,7 +103,8 @@ class Metadata:
         self.f_probesize = constantly(5)
         self.f_analyzeduration = duration_from_probesize
 
-        cmd = MPLAYER_GET_METADATA.format(fname= quote(fName))
+    def init(self):
+        cmd = MPLAYER_GET_METADATA.format(fname=quote(self._fName),dvd=quote(self._dvd))
 
         proc = Popen(cmd,
                      stdout = PIPE,
@@ -213,7 +216,8 @@ def dump(meta, infile):
 
     if meta._force_dump or not os.path.exists(outfile):
         call_it(MPLAYER_DUMP.format(infile = quote(infile),
-                                    outfile = quote(outfile)))
+                                    outfile = quote(outfile),
+                                    dvd=quote(meta._dvd)))
 
     return outfile
 
@@ -520,6 +524,9 @@ if __name__ == "__main__":
                             help="The video source to rip",
                             nargs='?',
                             default="dvd://1")
+    parser.add_argument("--dvd-device",
+                            help="Select the dvd device",
+                            default='/dev/dvd')
     parser.add_argument("--volume",
                             help="Set the disk volume title",
                             default=None)
@@ -572,6 +579,7 @@ if __name__ == "__main__":
     print(args)
 
     meta = Metadata(args.infile)
+    meta._dvd = args.dvd_device
     meta._out_format = args.container
     meta._lcodes = args.lang.split(',')
     meta._tune = args.tune
@@ -590,6 +598,8 @@ if __name__ == "__main__":
         meta.f_interlaced = constantly(args.interlaced)
     if args.probesize is not None:
         meta.f_probesize = constantly(args.probesize)
+
+    meta.init()
 
     actions = []
     if args.print_meta:
