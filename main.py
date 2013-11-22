@@ -47,6 +47,8 @@ MKVPROPEDIT_INFO=""" \\
                     --edit info --set {key}={value}"""
 MKVPROPEDIT_TRACK=""" \\
                     --edit track:{st_type}{st_out_idx} --set {key}={value}"""
+MKVPROPEDIT_CHAPTERS=""" \\
+                    --chapters {chapfile}"""
 
 MPLAYER_METADATA_RE = re.compile("ID_(\w+)=(.*)")
 MPLAYER_VIDEO_RE = re.compile(
@@ -55,6 +57,8 @@ MPLAYER_AUDIO_RE = re.compile(
      "audio stream: (\d+) format: (.+) language: (\w+) aid: (\d+).")
 MPLAYER_SUBTITLES_RE = re.compile(
      "subtitle \( sid \): (\d+) language: (\w+)")
+MPLAYER_CHAPTERS_RE = re.compile(
+     "CHAPTERS: ((\d\d:\d\d:\d\d.\d\d\d,)*)")
 
 dry_run = False
 def call_it(cmd):
@@ -95,6 +99,7 @@ class Metadata:
         self._out_format = 'mkv'
         self._lcodes = ( 'fr', 'en' )
         self._streams = rip.db.DB()
+        self._chapters=set()
         self.f_volume = volume_from_metadata
         self.f_title = title_from_volume
         self.f_year = constantly(None)
@@ -122,6 +127,13 @@ class Metadata:
                 idx = match.groups()
                 self._streams.append(st_type='v',
                                      st_in_idx=idx)
+                continue
+
+            match = MPLAYER_CHAPTERS_RE.match(line)
+            if match:
+                chapters = match.group(1)[:-1].split(',')
+
+                self._chapters = self._chapters.union(chapters)
                 continue
 
             match = MPLAYER_AUDIO_RE.match(line)
@@ -199,6 +211,9 @@ class Metadata:
 
         return fmt.format(volume=volume.replace('/','-'),
                           title=title.replace('/','-'))
+
+    def chapters(self):
+        return sorted(self._chapters)
 
 def makeBaseDir(filePath):
     dirs = os.path.dirname(filePath)
@@ -487,6 +502,20 @@ def print_meta(meta, infile):
     print(meta._metadata)
     return infile
 
+def chapters(meta,infile):
+    chapfile = meta.name() + ".chp"
+    with open(chapfile, "wt") as f:
+        for idx, val in enumerate(meta.chapters()):
+            print("CHAPTER{:02d}={}".format(idx,val), file=f)
+            print("CHAPTER{:02d}NAME=Chapter {}".format(idx,idx), file=f)
+
+    cmd = MKVPROPEDIT.format(fname=quote(infile))
+    cmd += MKVPROPEDIT_CHAPTERS.format(chapfile=quote(chapfile))
+
+    call_it(cmd)
+
+    return infile
+
 def set_defaults(meta, infile):
     # XXX should check if this is really a Matroska?
     cmd = MKVPROPEDIT.format(fname=quote(infile))
@@ -607,6 +636,7 @@ if __name__ == "__main__":
     actions.append(dump)
     actions.append(probe)
     actions.append(conv)
+    actions.append(chapters)
     actions.append(set_defaults)
 
     infile = meta._fName
