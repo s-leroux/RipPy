@@ -6,6 +6,7 @@ from itertools import chain
 from subprocess import Popen,call,PIPE
 from pipes import quote
 from io import StringIO
+from rip import pred
 
 
 MPLAYER_GET_METADATA = """mplayer {fname} \\
@@ -455,8 +456,13 @@ def probe(meta, infile):
         print("FOUND stream id {} ({}) as index {}".format(
                      st_id, st_type, st_in_idx))
 
-        stream = meta._streams.find(st_type=st_type,st_id=st_id)
-        stream['st_in_idx'] = st_in_idx
+        stream = meta._streams.get(st_type=st_type,st_id=st_id)
+        if stream:
+            stream['st_in_idx'] = st_in_idx
+        else:
+            print("Can't find stream 0x{:02x}".format(st_id))
+
+    print([i for i in meta._streams])
 
     return infile
 
@@ -469,29 +475,28 @@ def conv(meta, infile):
                         aduration=meta.analyzeduration() * 1000000)
 
     cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0", tune=meta._tune)
-    print([i for i in meta._streams])
     meta._streams.get(st_type='v')['st_out_idx'] = 0
 
     if meta.interlaced():
         cmd += FFMPEG_VIDEO_DEINTERLACE.format(sspec="v:0", ospec="v:0")
 
     aid = 0
-    for stream in meta._streams.having(st_type='a').filter('st_lang', meta._lcodes):
-        if 'st_in_idx' in stream:
-            stream['st_out_idx'] = aid
-            cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
-                                           ospec = "a:"+str(aid),
-                                           lang = iso639_1_to_iso639_2(stream['st_lang']))
-            aid += 1
+    for stream in meta._streams.all(st_type='a').fltr(pred.order_by('st_lang',
+                                            meta._lcodes), pred.having('st_in_idx')):
+        stream['st_out_idx'] = aid
+        cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
+                                       ospec = "a:"+str(aid),
+                                       lang = iso639_1_to_iso639_2(stream['st_lang']))
+        aid += 1
 
     sid = 0
-    for stream in meta._streams.having(st_type='s').filter('st_lang', meta._lcodes):
-        if 'st_in_idx' in stream:
-            stream['st_out_idx'] = sid
-            cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
-                                           ospec = "s:"+str(sid),
-                                           lang = iso639_1_to_iso639_2(stream['st_lang']))
-            sid += 1
+    for stream in meta._streams.all(st_type='s').fltr(pred.order_by('st_lang',
+                                            meta._lcodes), pred.having('st_in_idx')):
+        stream['st_out_idx'] = sid
+        cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
+                                       ospec = "s:"+str(sid),
+                                       lang = iso639_1_to_iso639_2(stream['st_lang']))
+        sid += 1
 
     if meta._force_conv or not os.path.exists(outfile):
         call_it(" ".join((cmd, quote(outfile))))
@@ -521,12 +526,11 @@ def set_defaults(meta, infile):
     cmd = MKVPROPEDIT.format(fname=quote(infile))
     cmd += MKVPROPEDIT_INFO.format(key='title', value=quote(meta.title()))
 
-    for stream in meta._streams.having(st_type='s'):
-        if 'st_out_idx' in stream:
-            cmd += MKVPROPEDIT_TRACK.format(st_type=stream['st_type'],
-                                          st_out_idx=stream['st_out_idx']+1,
-                                          key='flag-default',
-                                          value = '0')
+    for stream in meta._streams.all(st_type='s').fltr(pred.having('st_out_idx')):
+        cmd += MKVPROPEDIT_TRACK.format(st_type=stream['st_type'],
+                                      st_out_idx=stream['st_out_idx']+1,
+                                      key='flag-default',
+                                      value = '0')
 
     call_it(cmd)
 

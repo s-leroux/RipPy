@@ -1,3 +1,5 @@
+from rip import pred
+
 class DBIter:
     def __init__(self, iterable):
         self._it = iter(iterable)
@@ -8,29 +10,23 @@ class DBIter:
     def __next__(self):
         return next(self._it)
 
-    def filter(self, attr, values):
-        r = [i for i in self._it] # !!! realyze lazy seq.
-        return DBIter((item for value in values 
-                         for item in r
-                             if item.get(attr) == value))
-
-    def having(self, **kwargs):
+    def fltr(self, *filters):
         result = self
+        for f in filters:
+            result = f(result)
+
+        return DBIter(result)
+
+    def all(self, **kwargs):
+        result = self
+
         for key,value in kwargs.items():
-            result=result.filter(key, (value,))
+            result=result.fltr(pred.is_equal(key, value))
 
         return result
 
-    def find(self, **kwargs):
-        result = self.having(**kwargs)
-
-        try:
-            return next(result)
-        except StopIteration:
-            return dict(**kwargs)
-
     def get(self, **kwargs):
-        result = self.having(**kwargs)
+        result = self.all(**kwargs)
 
         try:
             return next(result)
@@ -50,14 +46,11 @@ class DB:
     def append(self, **kwargs):
         self._db.append(kwargs)
 
-    def filter(self, attr, values):
-        return self.__iter__().filter(attr,values)
-
-    def having(self, **kwargs):
-        return self.__iter__().having(**kwargs)
+    def fltr(self, *preds):
+        return self.__iter__().fltr(*preds)
 
     def get(self, **kwargs):
         return self.__iter__().get(**kwargs)
 
-    def find(self, **kwargs):
-        return self.__iter__().find(**kwargs)
+    def all(self, **kwargs):
+        return self.__iter__().all(**kwargs)
