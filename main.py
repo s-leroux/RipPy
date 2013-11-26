@@ -43,9 +43,15 @@ FFMPEG_AUDIO = """ \\
             -metadata:s:{ospec} language={lang}"""
 FFMPEG_SUBTITLES = FFMPEG_AUDIO
 
+FFMPEG_FINAL_COPY = """ ffmpeg -y -i {infile} \\
+            -map 0 -codec copy \\
+            {outfile}"""
+
 MKVPROPEDIT="""mkvpropedit {fname} """
 MKVPROPEDIT_INFO=""" \\
-                    --edit info --set {key}={value}"""
+                 --edit info --set {key}={value}"""
+                 # ^^^ XXX this *sometimes* leads to
+                 # mkv file unreadable by ffmpeg... 
 MKVPROPEDIT_TRACK=""" \\
                     --edit track:{st_type}{st_out_idx} --set {key}={value}"""
 MKVPROPEDIT_CHAPTERS=""" \\
@@ -524,8 +530,6 @@ def chapters(meta,infile):
 def set_defaults(meta, infile):
     # XXX should check if this is really a Matroska?
     cmd = MKVPROPEDIT.format(fname=quote(infile))
-    cmd += MKVPROPEDIT_INFO.format(key='title', value=quote(meta.title()))
-
     for stream in meta._streams.all(st_type='s').fltr(pred.having('st_out_idx')):
         cmd += MKVPROPEDIT_TRACK.format(st_type=stream['st_type'],
                                       st_out_idx=stream['st_out_idx']+1,
@@ -534,7 +538,35 @@ def set_defaults(meta, infile):
 
     call_it(cmd)
 
+    # Curiously (?) editing both the segment title and 
+    # subtitles default flags in a single call to 
+    # mkvpropedit leads to MKV files unreadable by ffmpeg.
+    #
+    # In addition, they seems to have been called in that
+    # precise order: chapters, default flags, segment title
+    cmd = MKVPROPEDIT.format(fname=quote(infile))
+    cmd += MKVPROPEDIT_INFO.format(key='title', value=quote(meta.title()))
+
+    call_it(cmd)
+
     return infile
+
+def final_copy(meta, infile):
+    #
+    # Some software are unable to understand MKV files whose
+    # stream header have been pushed to the end by `mkvpropedit`
+    #
+    # We will use ffmpeg to remux the file to a less complex
+    # format
+    #
+    title, ext = os.path.splitext(infile)
+    outfile = ".".join((title,"DVDRip",ext[1:]))
+    cmd = FFMPEG_FINAL_COPY.format(infile=quote(infile),
+                                   outfile=quote(outfile))
+
+    call_it(cmd)
+
+    return outfile
 
 
 #print(meta._metadata)
@@ -640,8 +672,15 @@ if __name__ == "__main__":
     actions.append(dump)
     actions.append(probe)
     actions.append(conv)
-    actions.append(chapters)
+    actions.append(chapters) 
+        ### ^^^ XXX adding chapters to matroska files cause problems
+        ### to some readers as they "push" the stream header data
+        ### to the end of the file. In addition, mkvmerge
+        ### seems to be unable to deal with ffmpeg encoded
+        ### VOBSUB subtitles....
     actions.append(set_defaults)
+    # actions.append(final_copy) ### <-- This was a "hack" to try to
+                                 ### deal with "complex" matroska files
 
     infile = meta._fName
 
