@@ -515,10 +515,13 @@ def print_meta(meta, infile):
 
 def chapters(meta,infile):
     chapfile = meta.name() + ".chp"
-    with open(chapfile, "wt") as f:
-        for idx, val in enumerate(meta.chapters()):
-            print("CHAPTER{:02d}={}".format(idx,val), file=f)
-            print("CHAPTER{:02d}NAME=Chapter {}".format(idx,idx), file=f)
+    makeBaseDir(chapfile)
+
+    if not os.path.exists(chapfile):
+        with open(chapfile, "wt") as f:
+            for idx, val in enumerate(meta.chapters()):
+                print("CHAPTER{:02d}={}".format(idx,val), file=f)
+                print("CHAPTER{:02d}NAME=Chapter {}".format(idx,idx), file=f)
 
     cmd = MKVPROPEDIT.format(fname=quote(infile))
     cmd += MKVPROPEDIT_CHAPTERS.format(chapfile=quote(chapfile))
