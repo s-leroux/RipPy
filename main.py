@@ -2,6 +2,7 @@ import argparse
 
 import re
 import os, os.path
+import shutil
 from itertools import chain
 from subprocess import Popen,call,PIPE
 from pipes import quote
@@ -571,6 +572,13 @@ def final_copy(meta, infile):
 
     return outfile
 
+def install(meta, infile):
+    if meta._target is not None:
+        dst = os.path.join(meta._target, infile)
+        makeBaseDir(dst)
+        shutil.move(infile, dst)
+
+        
 
 #print(meta._metadata)
 #print(meta._aid)
@@ -592,6 +600,9 @@ if __name__ == "__main__":
                             help="The video source to rip",
                             nargs='?',
                             default="dvd://1")
+    parser.add_argument("--target",
+                            help="Final target directory.",
+                            default=None)
     parser.add_argument("--dvd-device",
                             help="Select the dvd device",
                             default='/dev/dvd')
@@ -653,6 +664,7 @@ if __name__ == "__main__":
     meta._tune = args.tune
     meta._force_dump = args.force_dump
     meta._force_conv = args.force_conv
+    meta._target = args.target
 
     if args.volume is not None:
         meta.f_volume = constantly(args.volume)
@@ -684,6 +696,7 @@ if __name__ == "__main__":
     actions.append(set_defaults)
     # actions.append(final_copy) ### <-- This was a "hack" to try to
                                  ### deal with "complex" matroska files
+    actions.append(install)
 
     infile = meta._fName
 
