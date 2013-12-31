@@ -205,10 +205,10 @@ class Metadata:
         has_subdir = (volume != title) or (episode is not None)
 
         if has_subdir:
+            if episode is not None:
+                title = "{}.{} {}".format(volume,episode,title)
             if year is not None:
                 volume = "{} ({})".format(volume, year)
-            if episode is not None:
-                title = "{}.{}".format(title,episode)
 
             fmt="{volume}/{title}"
         else:
