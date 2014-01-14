@@ -38,6 +38,8 @@ FFMPEG_VIDEO = """ \\
             -crf:{ospec} 20"""
 FFMPEG_VIDEO_DEINTERLACE = """ \\
             -filter:{ospec} [in]yadif=0:0:0[out]"""
+FFMPEG_VIDEO_ASPECT = """ \\
+            -aspect:{ospec} {ratio}"""
 FFMPEG_AUDIO = """ \\
             -map 0:{ispec} \\
             -codec:{ospec} copy \\
@@ -113,7 +115,8 @@ class Metadata:
         self.f_year = constantly(None)
         self.f_episode = constantly(None)
         self.f_interlaced = constantly(False) # There is probable an heuristic
-        self.f_probesize = constantly(5)
+        self.f_aspect_ratio = constantly(None)
+        self.f_probesize = constantly(2000)
         self.f_analyzeduration = duration_from_probesize
 
     def init(self):
@@ -180,6 +183,9 @@ class Metadata:
 
     def interlaced(self):
         return self.f_interlaced(self)
+
+    def aspect_ratio(self):
+        return self.f_aspect_ratio(self)
 
     def probesize(self):
         return self.f_probesize(self)
@@ -487,6 +493,10 @@ def conv(meta, infile):
     if meta.interlaced():
         cmd += FFMPEG_VIDEO_DEINTERLACE.format(sspec="v:0", ospec="v:0")
 
+    if meta.aspect_ratio():
+        cmd += FFMPEG_VIDEO_ASPECT.format(sspec="v:0", ospec="v:0",
+                                                ratio=meta.aspect_ratio())
+
     aid = 0
     for stream in meta._streams.all(st_type='a').fltr(pred.order_by('st_lang',
                                             meta._lcodes), pred.having('st_in_idx')):
@@ -628,6 +638,9 @@ if __name__ == "__main__":
                             help="Mark the video as being interlaced",
                             action='store_true',
                             default=None)
+    parser.add_argument("--aspect",
+                            help="Force aspect ratio",
+                            default=None)
     parser.add_argument("--probesize",
                             help="Set the probesize in Mframes (x1000000)",
                             type=int,
@@ -676,6 +689,8 @@ if __name__ == "__main__":
         meta.f_episode = constantly(args.episode)
     if args.interlaced is not None:
         meta.f_interlaced = constantly(args.interlaced)
+    if args.aspect is not None:
+        meta.f_aspect_ratio = constantly(args.aspect)
     if args.probesize is not None:
         meta.f_probesize = constantly(args.probesize)
 
