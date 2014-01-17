@@ -27,6 +27,9 @@ FFPROBE_STREAM_INFO = """ffprobe \\
             -show_entries 'stream=index,codec_type,id' \\
             -i {fname}"""
 
+FFMPEG_IDET = """ffmpeg -filter:v idet -frames:v 5000 -an \\
+            -f rawvideo -y /dev/null -i {fname} 2>&1 | grep TFF"""
+
 FFMPEG = """ffmpeg -y  \\
             -probesize {psize} -analyzeduration {aduration} \\
             -i {infile}"""
@@ -60,6 +63,7 @@ MKVPROPEDIT_TRACK=""" \\
 MKVPROPEDIT_CHAPTERS=""" \\
                     --chapters {chapfile}"""
 
+FFMPEG_IDET_RE = re.compile(".*TFF:(\d+) BFF:(\d+) Progressive:(\d+) Undetermined:(\d+)""")
 MPLAYER_METADATA_RE = re.compile("ID_(\w+)=(.*)")
 MPLAYER_VIDEO_RE = re.compile(
      "ID_VIDEO_ID=(\d+)")
@@ -479,6 +483,38 @@ def probe(meta, infile):
 
     return infile
 
+def idet(meta, infile):
+    print("Testing if interlaced")
+    cmd = FFMPEG_IDET.format(fname=quote(infile))
+
+    iframes, pframes = (0,0)
+
+    proc = Popen(cmd,
+                 stdout = PIPE,
+                 shell=True, ### !!! This assume proper argument escaping
+                 universal_newlines = True)
+    for line in proc.stdout:
+        match = FFMPEG_IDET_RE.match(line)
+        print(line)
+        if match:
+            tff, bff, progressive, undetermined = \
+                match.groups()
+
+            print(tff,bff,progressive,undetermined,match.groups())
+
+            iframes += int(tff)
+            iframes += int(bff)
+            pframes += int(progressive)
+
+    print("Score: iframe =",iframes,"pframes =",pframes)
+    if iframes > pframes:
+        print("*** Interlaced according to idet")
+        meta.f_interlaced = constantly(True)
+    else:
+        print("*** Probably progressive")
+
+    return infile
+
 def conv(meta, infile):
     title, _ = os.path.splitext(infile)
 
@@ -700,6 +736,7 @@ if __name__ == "__main__":
     if args.print_meta:
         actions.append(print_meta)
     actions.append(dump)
+    actions.append(idet)
     actions.append(probe)
     actions.append(conv)
     actions.append(chapters) 
