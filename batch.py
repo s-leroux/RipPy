@@ -9,6 +9,7 @@ for line in fileinput.input():
 
     if re.match("\d{4}",episode_or_year):
         cmd = "python3 main.py --volume {volume} \
+                               --title {name} \
                                --year {episode_or_year} \
                                --dvd-device {iso} \
                                --target '/usr/local/share/xbmc/Movies' \
