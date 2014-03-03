@@ -6,7 +6,7 @@ import shutil
 from itertools import chain
 from subprocess import Popen,call,PIPE
 from pipes import quote
-from io import StringIO
+from io import StringIO, TextIOWrapper
 from rip import pred
 
 
@@ -128,9 +128,9 @@ class Metadata:
 
         proc = Popen(cmd,
                      stdout = PIPE,
-                     shell=True, ### !!! This assume proper argument escaping
-                     universal_newlines = True)
-        for line in proc.stdout:
+                     shell=True) ### !!! This assume proper argument escaping
+        stdout = TextIOWrapper(proc.stdout,errors='ignore')
+        for line in stdout:
             match = MPLAYER_METADATA_RE.match(line)
             if match:
                 key, value = match.group(1,2)
@@ -452,9 +452,9 @@ def probe(meta, infile):
 
     proc = Popen(cmd,
                  stdout = PIPE,
-                 shell=True, ### !!! This assume proper argument escaping
-                 universal_newlines = True)
-    for line in proc.stdout:
+                 shell=True) ### !!! This assume proper argument escaping
+    stdout = TextIOWrapper(proc.stdout,errors='ignore')
+    for line in stdout:
         header, index, codec_type, *tail = fields=line.split(',')
         if header != 'stream':
             continue
@@ -491,9 +491,9 @@ def idet(meta, infile):
 
     proc = Popen(cmd,
                  stdout = PIPE,
-                 shell=True, ### !!! This assume proper argument escaping
-                 universal_newlines = True)
-    for line in proc.stdout:
+                 shell=True) ### !!! This assume proper argument escaping
+    stdout = TextIOWrapper(proc.stdout,errors='ignore')
+    for line in stdout:
         match = FFMPEG_IDET_RE.match(line)
         print(line)
         if match:
