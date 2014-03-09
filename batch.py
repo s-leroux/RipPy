@@ -13,6 +13,7 @@ for line in fileinput.input():
                                --year {episode_or_year} \
                                --dvd-device {iso} \
                                --target '/usr/local/share/xbmc/Movies' \
+                               $RIP_OPT \
                                {title}"
         
     else:
@@ -21,6 +22,7 @@ for line in fileinput.input():
                                --title {name} \
                                --dvd-device {iso} \
                                --target '/usr/local/share/xbmc/TV Shows' \
+                               $RIP_OPT \
                                {title}"
 
     cmd = cmd.format(volume=quote(volume),
