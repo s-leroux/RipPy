@@ -1,6 +1,7 @@
 import argparse
 
 import re
+import math
 import os, os.path
 import shutil
 from itertools import chain
@@ -48,6 +49,11 @@ FFMPEG_AUDIO = """ \\
             -codec:{ospec} copy \\
             -metadata:s:{ospec} language={lang}"""
 FFMPEG_SUBTITLES = FFMPEG_AUDIO
+#FFMPEG_OUTFILE=""" \\
+#            -reserve_index_space {idx_space} \\
+#            {outfile}"""
+FFMPEG_OUTFILE=""" \\
+            {outfile}"""
 
 FFMPEG_FINAL_COPY = """ ffmpeg -y -i {infile} \\
             -map 0 -codec copy \\
@@ -62,6 +68,8 @@ MKVPROPEDIT_TRACK=""" \\
                     --edit track:{st_type}{st_out_idx} --set {key}={value}"""
 MKVPROPEDIT_CHAPTERS=""" \\
                     --chapters {chapfile}"""
+
+MKVMERGE="""mkvmerge -o {dst} {src}"""
 
 FFMPEG_IDET_RE = re.compile(".*TFF:(\d+) BFF:(\d+) Progressive:(\d+) Undetermined:(\d+)""")
 MPLAYER_METADATA_RE = re.compile("ID_(\w+)=(.*)")
@@ -93,6 +101,9 @@ def volume_from_metadata(self):
 def title_from_volume(self):
     return self.volume()
 
+def duration_from_metadata(self):
+    return float(self._metadata["LENGTH"])
+
 def duration_from_probesize(self):
     return self.probesize()//2
 
@@ -121,7 +132,9 @@ class Metadata:
         self.f_interlaced = constantly(False) # There is probable an heuristic
         self.f_aspect_ratio = constantly(None)
         self.f_probesize = constantly(2000)
+        self.f_idxsize = constantly(50*1024)
         self.f_analyzeduration = duration_from_probesize
+        self.f_duration = duration_from_metadata
 
     def init(self):
         cmd = MPLAYER_GET_METADATA.format(fname=quote(self._fName),dvd=quote(self._dvd))
@@ -182,6 +195,9 @@ class Metadata:
     def year(self):
         return self.f_year(self)
 
+    def duration(self):
+        return self.f_duration(self)
+
     def episode(self):
         return self.f_episode(self)
 
@@ -193,6 +209,9 @@ class Metadata:
 
     def probesize(self):
         return self.f_probesize(self)
+
+    def idxsize(self):
+        return self.f_idxsize(self)
 
     def analyzeduration(self):
         return self.f_analyzeduration(self)
@@ -519,9 +538,19 @@ def conv(meta, infile):
     title, _ = os.path.splitext(infile)
 
     outfile = ".".join((title, meta._out_format))
+    #
+    # estimate index (cues) size
+    # Routhly 50kB per hour
+    #
+    hours = math.ceil(meta.duration()/3600)
+    idx_space = hours*meta.idxsize()
+
+    print("Duration less than", hours, "hours; idx_space =", idx_space)
+
     cmd = FFMPEG.format(infile=quote(infile),
                         psize=meta.probesize() * 1000000,
-                        aduration=meta.analyzeduration() * 1000000)
+                        aduration=meta.analyzeduration() * 1000000,
+                        idx_space=idx_space)
 
     cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0", tune=meta._tune)
     meta._streams.get(st_type='v')['st_out_idx'] = 0
@@ -551,8 +580,11 @@ def conv(meta, infile):
                                        lang = iso639_1_to_iso639_2(stream['st_lang']))
         sid += 1
 
+    cmd += FFMPEG_OUTFILE.format(outfile=quote(outfile),
+                                idx_space=idx_space)
+
     if meta._force_conv or not os.path.exists(outfile):
-        call_it(" ".join((cmd, quote(outfile))))
+        call_it(cmd)
 
     return outfile
 
@@ -681,6 +713,10 @@ if __name__ == "__main__":
                             help="Set the probesize in Mframes (x1000000)",
                             type=int,
                             default=None)
+    parser.add_argument("--idxsize",
+                            help="Set the idex (cues) size in bytes par hour",
+                            type=int,
+                            default=None)
     parser.add_argument("--container",
                             help="Set the container format (default mkv)",
                             default='mkv')
@@ -727,6 +763,8 @@ if __name__ == "__main__":
         meta.f_interlaced = constantly(args.interlaced)
     if args.aspect is not None:
         meta.f_aspect_ratio = constantly(args.aspect)
+    if args.idxsize is not None:
+        meta.f_idxsize = constantly(args.idxsize)
     if args.probesize is not None:
         meta.f_probesize = constantly(args.probesize)
 
