@@ -597,7 +597,6 @@ def conv(meta, infile):
 
     outfile = ".".join((meta.name(),meta._out_format))
     makeBaseDir(outfile)
-
     #
     # estimate index (cues) size
     # Routhly 50kB per hour
@@ -717,7 +716,11 @@ def install(meta, infile):
     if meta._target is not None:
         dst = os.path.join(meta._target, infile)
         makeBaseDir(dst)
-        shutil.move(infile, dst)
+        # Use mkvmerge to copy in order to produce correct(?) cues
+        cmd = MKVMERGE.format(src=quote(infile),
+                                 dst=quote(dst))
+        call_it(cmd)
+        # shutil.move(infile, dst)
 
         
 
