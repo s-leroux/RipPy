@@ -20,6 +20,10 @@ MPLAYER_DUMP = """mplayer {infile} \\
         -dvd-device {dvd} \\
             -dumpstream -dumpfile \\
             {outfile}"""
+FFPROBE_TS = """ffprobe \\
+            -probesize {psize} -analyzeduration {aduration} \\
+            -show_streams \\
+            -i {fname}"""
 
 FFPROBE_STREAM_INFO = """ffprobe \\
             -probesize {psize} -analyzeduration {aduration} \\
@@ -29,11 +33,11 @@ FFPROBE_STREAM_INFO = """ffprobe \\
             -i {fname}"""
 
 FFMPEG_IDET = """ffmpeg -filter:v idet -frames:v 5000 -an \\
-            -f rawvideo -y /dev/null -i {fname} 2>&1 | grep TFF"""
+            -f rawvideo -y /dev/null -ss {ss} -i {fname} -ss 00:00:01 2>&1 | grep TFF"""
 
 FFMPEG = """ffmpeg -y  \\
             -probesize {psize} -analyzeduration {aduration} \\
-            -i {infile}"""
+            -i {infile} -ss {ss}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
             -codec:{ospec} libx264 \\
@@ -48,7 +52,10 @@ FFMPEG_AUDIO = """ \\
             -map 0:{ispec} \\
             -codec:{ospec} copy \\
             -metadata:s:{ospec} language={lang}"""
-FFMPEG_SUBTITLES = FFMPEG_AUDIO
+FFMPEG_SUBTITLES = """ \\
+            -map 0:{ispec} \\
+            -codec:{ospec} dvdsub \\
+            -metadata:s:{ospec} language={lang}"""
 #FFMPEG_OUTFILE=""" \\
 #            -reserve_index_space {idx_space} \\
 #            {outfile}"""
@@ -136,7 +143,7 @@ class Metadata:
         self.f_analyzeduration = duration_from_probesize
         self.f_duration = duration_from_metadata
 
-    def init(self):
+    def initFromDVD(self):
         cmd = MPLAYER_GET_METADATA.format(fname=quote(self._fName),dvd=quote(self._dvd))
 
         proc = Popen(cmd,
@@ -184,6 +191,47 @@ class Metadata:
                 continue
 
             print("OUT:",line.strip())
+
+    def initFromTS(self):
+        cmd = FFPROBE_TS.format(fname=quote(self._fName),
+                        psize=meta.probesize() * 1000000,
+                        aduration=meta.analyzeduration() * 1000000)
+
+        proc = Popen(cmd,
+                     stdout = PIPE,
+                     shell=True) ### !!! This assume proper argument escaping
+        stdout = TextIOWrapper(proc.stdout,errors='ignore')
+
+        kv_re = re.compile("(DISPOSITION:|TAG:)?(.*)=(.*)")
+        kv = {}
+
+        for line in stdout:
+            match = kv_re.match(line)
+            if match:
+                key, value = match.group(2,3)
+                kv[key] = value
+                # continue
+            elif line.strip() == '[/STREAM]':
+                idx = int(kv['index'])
+                t = 'v' if kv['codec_type'] == 'video' \
+                    else 'a' if kv['codec_type'] == 'audio' \
+                    else 's' if kv['codec_type'] == 'subtitle' \
+                    else '?'
+
+                d = {'st_type': t, 'st_in_idx': idx, 'st_id': int(kv['id'],base=0)}
+                if t == 'a':
+                    d['aid'] = int(kv['id'],base=0)
+
+                l = kv.get('language')
+                if l is not None:
+                    d['st_lang'] = iso639_2_to_iso639_1(l)
+
+                self._streams.append(**d)
+
+                if 'duration' in kv:
+                    self._metadata['LENGTH'] = float(kv['duration'])
+
+        print([i for i in meta._streams])
 
 
     def volume(self):
@@ -273,8 +321,7 @@ def dump(meta, infile):
 
     return outfile
 
-def iso639_1_to_iso639_2(XX):
-    return {
+iso639_1_to_iso639_2_map = {
         'aa': 'aar', # Afar
         'ab': 'abk', # Abkhazian
         'ae': 'ave', # Avestan
@@ -459,7 +506,16 @@ def iso639_1_to_iso639_2(XX):
         'za': 'zha', # Zhuang; Chuang
         'zh': 'chi', # Chinese
         'zu': 'zul', # Zulu
-    }.get(XX, "")
+    }
+iso639_2_to_iso639_1_map = dict((value,key) for key,value in iso639_1_to_iso639_2_map.items())
+# non standard codes
+iso639_2_to_iso639_1_map['fra'] = 'fr'
+
+def iso639_1_to_iso639_2(XX):
+    return iso639_1_to_iso639_2_map.get(XX, "")
+
+def iso639_2_to_iso639_1(XXX):
+    return iso639_2_to_iso639_1_map.get(XXX, "")
 
 def probe(meta, infile):
     """Probe a streams and try to match ids with their
@@ -469,11 +525,13 @@ def probe(meta, infile):
                         psize=meta.probesize() * 1000000,
                         aduration=meta.analyzeduration() * 1000000)
 
+    print("PROBE CMD IS",cmd)
     proc = Popen(cmd,
                  stdout = PIPE,
                  shell=True) ### !!! This assume proper argument escaping
     stdout = TextIOWrapper(proc.stdout,errors='ignore')
     for line in stdout:
+        print("PROBE:",line)
         header, index, codec_type, *tail = fields=line.split(',')
         if header != 'stream':
             continue
@@ -504,7 +562,7 @@ def probe(meta, infile):
 
 def idet(meta, infile):
     print("Testing if interlaced")
-    cmd = FFMPEG_IDET.format(fname=quote(infile))
+    cmd = FFMPEG_IDET.format(fname=quote(infile),ss=quote(meta._ss))
 
     iframes, pframes = (0,0)
 
@@ -537,7 +595,9 @@ def idet(meta, infile):
 def conv(meta, infile):
     title, _ = os.path.splitext(infile)
 
-    outfile = ".".join((title, meta._out_format))
+    outfile = ".".join((meta.name(),meta._out_format))
+    makeBaseDir(outfile)
+
     #
     # estimate index (cues) size
     # Routhly 50kB per hour
@@ -550,7 +610,10 @@ def conv(meta, infile):
     cmd = FFMPEG.format(infile=quote(infile),
                         psize=meta.probesize() * 1000000,
                         aduration=meta.analyzeduration() * 1000000,
-                        idx_space=idx_space)
+                        idx_space=idx_space,
+                        ss=quote(meta._ss))
+    if meta._to:
+        cmd += " -to {to} ".format(to=quote(meta._to))
 
     cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0", tune=meta._tune)
     meta._streams.get(st_type='v')['st_out_idx'] = 0
@@ -684,6 +747,10 @@ if __name__ == "__main__":
     parser.add_argument("--dvd-device",
                             help="Select the dvd device",
                             default='/dev/dvd')
+    parser.add_argument("--ts",
+                            help="Assume TS input file",
+                            action='store_true',
+                            default=False)
     parser.add_argument("--volume",
                             help="Set the disk volume title",
                             default=None)
@@ -708,6 +775,12 @@ if __name__ == "__main__":
                             default=None)
     parser.add_argument("--aspect",
                             help="Force aspect ratio",
+                            default=None)
+    parser.add_argument("--ss",
+                            help="Start time",
+                            default="00:00:00")
+    parser.add_argument("--to",
+                            help="End time",
                             default=None)
     parser.add_argument("--probesize",
                             help="Set the probesize in Mframes (x1000000)",
@@ -750,6 +823,8 @@ if __name__ == "__main__":
     meta._force_dump = args.force_dump
     meta._force_conv = args.force_conv
     meta._target = args.target
+    meta._ss = args.ss
+    meta._to = args.to
 
     if args.volume is not None:
         meta.f_volume = constantly(args.volume)
@@ -768,16 +843,22 @@ if __name__ == "__main__":
     if args.probesize is not None:
         meta.f_probesize = constantly(args.probesize)
 
-    meta.init()
+    if args.ts:
+        meta.initFromTS()
+    else:
+        meta.initFromDVD()
 
     actions = []
     if args.print_meta:
         actions.append(print_meta)
-    actions.append(dump)
+    if not args.ts:
+        actions.append(dump)
     actions.append(idet)
-    actions.append(probe)
+    if not args.ts:
+        actions.append(probe)
     actions.append(conv)
-    actions.append(chapters) 
+    if not args.ts:
+        actions.append(chapters) 
         ### ^^^ XXX adding chapters to matroska files cause problems
         ### to some readers as they "push" the stream header data
         ### to the end of the file. In addition, mkvmerge
