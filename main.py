@@ -23,21 +23,21 @@ MPLAYER_DUMP = """mplayer {infile} \\
 FFPROBE_TS = """ffprobe \\
             -probesize {psize} -analyzeduration {aduration} \\
             -show_streams \\
-            -i {fname}"""
+            -i file:{fname}"""
 
 FFPROBE_STREAM_INFO = """ffprobe \\
             -probesize {psize} -analyzeduration {aduration} \\
             -show_format -show_streams \\
             -of csv \\
             -show_entries 'stream=index,codec_type,id' \\
-            -i {fname}"""
+            -i file:{fname}"""
 
 FFMPEG_IDET = """ffmpeg -filter:v idet -frames:v 5000 -an \\
-            -f rawvideo -y /dev/null -ss {ss} -i {fname} -ss 00:00:01 2>&1 | grep TFF"""
+            -f rawvideo -y /dev/null -ss {ss} -i file:{fname} -ss 00:00:01 2>&1 | grep TFF"""
 
 FFMPEG = """ffmpeg -y  \\
             -probesize {psize} -analyzeduration {aduration} \\
-            -i {infile} -ss {ss}"""
+            -i file:{infile} -ss {ss}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
             -codec:{ospec} libx264 \\
@@ -60,11 +60,11 @@ FFMPEG_SUBTITLES = """ \\
 #            -reserve_index_space {idx_space} \\
 #            {outfile}"""
 FFMPEG_OUTFILE=""" \\
-            {outfile}"""
+            file:{outfile}"""
 
-FFMPEG_FINAL_COPY = """ ffmpeg -y -i {infile} \\
+FFMPEG_FINAL_COPY = """ ffmpeg -y -i file:{infile} \\
             -map 0 -codec copy \\
-            {outfile}"""
+            file:{outfile}"""
 
 MKVPROPEDIT="""mkvpropedit {fname} """
 MKVPROPEDIT_INFO=""" \\
@@ -719,6 +719,15 @@ def install(meta, infile):
         makeBaseDir(dst)
         shutil.move(infile, dst)
 
+    return infile
+
+def clean_vob(meta,infile):
+    title, _ = os.path.splitext(infile)
+    vob = ".".join((title,"vob"))
+    os.unlink(vob)
+
+    return infile
+
         
 
 #print(meta._metadata)
@@ -868,6 +877,8 @@ if __name__ == "__main__":
     # actions.append(final_copy) ### <-- This was a "hack" to try to
                                  ### deal with "complex" matroska files
     actions.append(install)
+    if (meta._dvd.endswith(".iso")):
+        actions.append(clean_vob)
 
     infile = meta._fName
 
