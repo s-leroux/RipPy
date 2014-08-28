@@ -17,9 +17,12 @@ MPLAYER_GET_METADATA = """mplayer {fname} \\
         -identify """
 
 MPLAYER_DUMP = """mplayer {infile} \\
-        -dvd-device {dvd} \\
-            -dumpstream -dumpfile \\
-            {outfile}"""
+            -dumpstream -dumpfile {outfile}"""
+
+MPLAYER_DVD_DUMP = """mplayer {infile} \\
+            -dvd-device {dvd} \\
+            -dumpstream -dumpfile {outfile}"""
+
 FFPROBE_TS = """ffprobe \\
             -probesize {psize} -analyzeduration {aduration} \\
             -show_streams \\
@@ -144,53 +147,54 @@ class Metadata:
         self.f_duration = duration_from_metadata
 
     def initFromDVD(self):
-        cmd = MPLAYER_GET_METADATA.format(fname=quote(self._fName),dvd=quote(self._dvd))
+        for part in (p.strip() for p in self._fName.split("+")):
+            cmd = MPLAYER_GET_METADATA.format(fname=quote(part),dvd=quote(self._dvd))
 
-        proc = Popen(cmd,
-                     stdout = PIPE,
-                     shell=True) ### !!! This assume proper argument escaping
-        stdout = TextIOWrapper(proc.stdout,errors='ignore')
-        for line in stdout:
-            match = MPLAYER_METADATA_RE.match(line)
-            if match:
-                key, value = match.group(1,2)
-                self._metadata[key] = value
-                # continue
+            proc = Popen(cmd,
+                         stdout = PIPE,
+                         shell=True) ### !!! This assume proper argument escaping
+            stdout = TextIOWrapper(proc.stdout,errors='ignore')
+            for line in stdout:
+                match = MPLAYER_METADATA_RE.match(line)
+                if match:
+                    key, value = match.group(1,2)
+                    self._metadata[key] = value
+                    # continue
 
-            match = MPLAYER_VIDEO_RE.match(line)
-            if match:
-                idx = match.groups()
-                self._streams.append(st_type='v',
-                                     st_in_idx=idx)
-                continue
+                match = MPLAYER_VIDEO_RE.match(line)
+                if match:
+                    idx = match.groups()
+                    self._streams.append(st_type='v',
+                                         st_in_idx=idx)
+                    continue
 
-            match = MPLAYER_CHAPTERS_RE.match(line)
-            if match:
-                chapters = match.group(1)[:-1].split(',')
+                match = MPLAYER_CHAPTERS_RE.match(line)
+                if match:
+                    chapters = match.group(1)[:-1].split(',')
 
-                self._chapters = self._chapters.union(chapters)
-                continue
+                    self._chapters = self._chapters.union(chapters)
+                    continue
 
-            match = MPLAYER_AUDIO_RE.match(line)
-            if match:
-                idx, fmt, lang, aid = match.groups()
-                self._streams.append(st_type='a',
-                                     st_lang=lang,
-                                    # st_in_idx=idx, # <-- not a good idea
-                                    # to store "streeam index" from
-                                    # mplayer
-                                     st_id=int(aid))
-                continue
+                match = MPLAYER_AUDIO_RE.match(line)
+                if match:
+                    idx, fmt, lang, aid = match.groups()
+                    self._streams.append(st_type='a',
+                                         st_lang=lang,
+                                        # st_in_idx=idx, # <-- not a good idea
+                                        # to store "streeam index" from
+                                        # mplayer
+                                         st_id=int(aid))
+                    continue
 
-            match = MPLAYER_SUBTITLES_RE.match(line)
-            if match:
-                sid, lang = match.groups()
-                self._streams.append(st_type='s',
-                                     st_lang=lang,
-                                     st_id=0x20+int(sid))
-                continue
+                match = MPLAYER_SUBTITLES_RE.match(line)
+                if match:
+                    sid, lang = match.groups()
+                    self._streams.append(st_type='s',
+                                         st_lang=lang,
+                                         st_id=0x20+int(sid))
+                    continue
 
-            print("OUT:",line.strip())
+                print("OUT({}):".format(part),line.strip())
 
     def initFromTS(self):
         cmd = FFPROBE_TS.format(fname=quote(self._fName),
@@ -311,13 +315,41 @@ def makeBaseDir(filePath):
         pass
 
 def dump(meta, infile):
+    # if infile contains '+', it is assumed to be a multi-part
+    # dump.
+    # As an example: dvd://1+dvd://2
+
     outfile = meta.name() + ".vob"
     makeBaseDir(outfile)
 
-    if meta._force_dump or not os.path.exists(outfile):
-        call_it(MPLAYER_DUMP.format(infile = quote(infile),
-                                    outfile = quote(outfile),
-                                    dvd=quote(meta._dvd)))
+    reallyDump = not os.path.exists(outfile)
+    try:
+        if meta._force_dump:
+            os.unlink()
+            reallyDump = true
+    except FileNotFoundError:
+        reallyDump = true
+
+    if reallyDump:
+        i = 0
+        for part in (p.strip() for p in infile.split("+")):
+            partfile = outfile+".{}".format(i)
+            print("DUMP",part,"TO",partfile)
+
+            DUMP = MPLAYER_DVD_DUMP if part.startswith("dvd://") else MPLAYER_DUMP
+
+            call_it(DUMP.format(infile = quote(part),
+                                        outfile = quote(partfile),
+                                        dvd=quote(meta._dvd)))
+            
+            if i == 0:
+                os.rename(partfile,outfile)
+            else:
+                with open(outfile, "ab") as out:
+                    shutil.copyfileobj(open(partfile, "rb"), out)
+                os.unlink(partfile)
+            i += 1
+
 
     return outfile
 
