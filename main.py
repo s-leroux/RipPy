@@ -57,7 +57,7 @@ FFMPEG_AUDIO = """ \\
             -metadata:s:{ospec} language={lang}"""
 FFMPEG_SUBTITLES = """ \\
             -map 0:{ispec} \\
-            -codec:{ospec} dvdsub \\
+            -codec:{ospec} {subformat} \\
             -metadata:s:{ospec} language={lang}"""
 #FFMPEG_OUTFILE=""" \\
 #            -reserve_index_space {idx_space} \\
@@ -146,7 +146,11 @@ class Metadata:
         self.f_analyzeduration = duration_from_probesize
         self.f_duration = duration_from_metadata
 
+        self.subformat = "dvdsub"
+
     def initFromDVD(self):
+        self.subformat = "copy" # prevent dvdsub -> dvdsub
+
         for part in (p.strip() for p in self._fName.split("+")):
             cmd = MPLAYER_GET_METADATA.format(fname=quote(part),dvd=quote(self._dvd))
 
@@ -672,7 +676,8 @@ def conv(meta, infile):
         stream['st_out_idx'] = sid
         cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
                                        ospec = "s:"+str(sid),
-                                       lang = iso639_1_to_iso639_2(stream['st_lang']))
+                                       lang = iso639_1_to_iso639_2(stream['st_lang']),
+                                       subformat=meta.subformat)
         sid += 1
 
     cmd += FFMPEG_OUTFILE.format(outfile=quote(outfile),
