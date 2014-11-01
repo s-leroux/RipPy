@@ -291,7 +291,7 @@ class Metadata:
 
         if has_subdir:
             if episode is not None:
-                title = "{}.{} {}".format(volume,episode,title)
+                title = "{}.{}.{}".format(volume,episode,title)
             if year is not None:
                 volume = "{} ({})".format(volume, year)
 
