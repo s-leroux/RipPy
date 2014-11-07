@@ -4,7 +4,7 @@ import fileinput
 from shlex import quote as quote
 
 for line in fileinput.input():
-    if line[0] == '#':
+    if line[0] == '#' or not line.strip():
         continue
 
     volume, iso, title, episode_or_year, name = (item.strip() 
