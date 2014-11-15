@@ -40,6 +40,7 @@ FFMPEG_IDET = """ffmpeg -filter:v idet -frames:v 5000 -an \\
 
 FFMPEG = """ffmpeg -y  \\
             -probesize {psize} -analyzeduration {aduration} \\
+            {ff} \\
             -i file:{infile} -ss {ss}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
@@ -647,7 +648,8 @@ def conv(meta, infile):
                         psize=meta.probesize() * 1000000,
                         aduration=meta.analyzeduration() * 1000000,
                         idx_space=idx_space,
-                        ss=quote(meta._ss))
+                        ss=quote(meta._ss),
+                        ff=meta._ff)
     if meta._to:
         cmd += " -to {to} ".format(to=quote(meta._to))
 
@@ -664,21 +666,23 @@ def conv(meta, infile):
     aid = 0
     for stream in meta._streams.all(st_type='a').fltr(pred.order_by('st_lang',
                                             meta._lcodes), pred.having('st_in_idx')):
-        stream['st_out_idx'] = aid
-        cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
-                                       ospec = "a:"+str(aid),
-                                       lang = iso639_1_to_iso639_2(stream['st_lang']))
-        aid += 1
+        if stream['st_id'] not in meta._kid:
+            stream['st_out_idx'] = aid
+            cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
+                                           ospec = "a:"+str(aid),
+                                           lang = iso639_1_to_iso639_2(stream['st_lang']))
+            aid += 1
 
     sid = 0
     for stream in meta._streams.all(st_type='s').fltr(pred.order_by('st_lang',
                                             meta._lcodes), pred.having('st_in_idx')):
-        stream['st_out_idx'] = sid
-        cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
-                                       ospec = "s:"+str(sid),
-                                       lang = iso639_1_to_iso639_2(stream['st_lang']),
-                                       subformat=meta.subformat)
-        sid += 1
+        if stream['st_id'] not in meta._kid:
+            stream['st_out_idx'] = sid
+            cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
+                                           ospec = "s:"+str(sid),
+                                           lang = iso639_1_to_iso639_2(stream['st_lang']),
+                                           subformat=meta.subformat)
+            sid += 1
 
     cmd += FFMPEG_OUTFILE.format(outfile=quote(outfile),
                                 idx_space=idx_space)
@@ -856,6 +860,12 @@ if __name__ == "__main__":
                             help="Force re-encoding",
                             action='store_true',
                             default=False)
+    parser.add_argument("--ff", 
+                            help="Raw argments passed to ffmpeg *unquoted*",
+                            default='')
+    parser.add_argument("--kid", 
+                            help="Coma-separated list of stream ID to ignore",
+                            default='')
 
     args = parser.parse_args()
 
@@ -871,6 +881,8 @@ if __name__ == "__main__":
     meta._target = args.target
     meta._ss = args.ss
     meta._to = args.to
+    meta._ff = args.ff
+    meta._kid = [int(i,base=0) for i in args.kid.split(',')]
 
     if args.volume is not None:
         meta.f_volume = constantly(args.volume)

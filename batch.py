@@ -4,7 +4,13 @@ import fileinput
 from shlex import quote as quote
 
 for line in fileinput.input():
-    if line[0] == '#' or not line.strip():
+    line = line.strip()
+    if not line or line[0] == '#':
+        continue
+
+    if line[0]=='@':
+        # Set options
+        os.environ['RIP_OPT']=line[1:]
         continue
 
     volume, iso, title, episode_or_year, name = (item.strip() 
