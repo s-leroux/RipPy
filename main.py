@@ -865,7 +865,7 @@ if __name__ == "__main__":
                             default='')
     parser.add_argument("--kid", 
                             help="Coma-separated list of stream ID to ignore",
-                            default='')
+                            default=None)
 
     args = parser.parse_args()
 
@@ -882,7 +882,7 @@ if __name__ == "__main__":
     meta._ss = args.ss
     meta._to = args.to
     meta._ff = args.ff
-    meta._kid = [int(i,base=0) for i in args.kid.split(',')]
+    meta._kid = [int(i,base=0) for i in args.kid.split(',')] if args.kid else []
 
     if args.volume is not None:
         meta.f_volume = constantly(args.volume)
