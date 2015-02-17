@@ -11,7 +11,7 @@ import sys
 import os
 
 LSDVD="lsdvd -Oy {device}"
-DDRESCUE="ddrescue -MA {device} {title}.iso {title}.log"
+DDRESCUE="ddrescue -MA {device} {title}.ISO {title}.LOG"
 EJECT="eject {device}"
             
 def _pipe(cmd, stdout=PIPE, stderr=STDOUT, args={}):
@@ -62,6 +62,30 @@ def display(proc):
 def run_and_display(cmd, **kwargs):
     display(pipe(cmd, **kwargs))
 
+def make_lst_file(lsdvd):
+    fmt = "{name:25s} | {title:>12s}.ISO | dvd://{ix:<3d} | 2000 | # {h:3d}:{m:02d}:{s:04.1f}"
+    threshold = 60*4 # four minutes
+
+    title = lsdvd['title']
+    name = title.replace("_"," ").title()
+
+    fname = "{title}.LST".format(title=title)
+
+    with open(fname, "at") as f:
+        if f.tell() > 0:
+            # File was already exisiting and not empty
+            # Abort
+            print(fname, "already existing")
+            return
+
+        for ix, length in [(int(track['ix']), float(track['length']))
+                                for track in lsdvd['track']]:
+            if length > threshold:
+                m, s = divmod(length, 60)
+                h, m = divmod(m, 60)
+                print(fmt.format(title=title, name=name, ix=ix, h=int(h), m=int(m), s=s),file=f)
+            
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("device", 
@@ -78,9 +102,10 @@ if __name__ == "__main__":
         #                  01234567
         rawdata = rawdata[8:]
 
-    info = ast.literal_eval(rawdata)
+    lsdvd = ast.literal_eval(rawdata)
 
-    title = info['title']
+    title = lsdvd['title']
+    make_lst_file(lsdvd)
     run(DDRESCUE, device=device, title=title)
     run(EJECT, device=device)
     

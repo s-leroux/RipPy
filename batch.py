@@ -4,8 +4,10 @@ import fileinput
 from shlex import quote as quote
 
 for line in fileinput.input():
+    line = line.split('#',1)[0]
     line = line.strip()
-    if not line or line[0] == '#':
+
+    if not line:
         continue
 
     if line[0]=='@':
@@ -15,6 +17,9 @@ for line in fileinput.input():
 
     volume, iso, title, episode_or_year, name = (item.strip() 
                                 for item in line.split("|"))
+
+    if not name:
+        name = volume
 
     if re.match("\d{4}",episode_or_year):
         cmd = "python3 main.py --volume {volume} \

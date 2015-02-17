@@ -926,7 +926,7 @@ if __name__ == "__main__":
     # actions.append(final_copy) ### <-- This was a "hack" to try to
                                  ### deal with "complex" matroska files
     actions.append(install)
-    if (meta._dvd.endswith(".iso")):
+    if (meta._dvd.lower().endswith(".iso")):
         actions.append(clean_vob)
 
     infile = meta._fName
