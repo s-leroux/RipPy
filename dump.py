@@ -11,10 +11,10 @@ import sys
 import os
 
 LSDVD="lsdvd -Oy {device}"
-DDRESCUE="ddrescue -MA {device} {title}.ISO {title}.LOG"
+DDRESCUE="ddrescue -MA {device} --block-size=2048 {title}.ISO {title}.LOG"
 EJECT="eject {device}"
             
-def _pipe(cmd, stdout=PIPE, stderr=STDOUT, args={}):
+def _pipe(cmd, stdout=PIPE, stderr=sys.stderr, args={}):
     cmd = cmd.format(**{k:quote(v) for k,v in args.items()})
 
     print("Running", cmd)
@@ -31,7 +31,7 @@ def wait(proc):
     return returncode
             
 def pipe(cmd, **kwargs):
-    return _pipe(cmd, stdout=PIPE, stderr=STDOUT, args=kwargs)
+    return _pipe(cmd, stdout=PIPE, stderr=sys.stderr, args=kwargs)
             
 def run(cmd, **kwargs):
     proc = _pipe(cmd, stdout=sys.stdout, stderr=sys.stderr, args=kwargs)
@@ -48,7 +48,10 @@ def collect_and_display(proc):
 
 def collect(proc):
     stream = TextIOWrapper(proc.stdout,errors='ignore')
-    return stream.read()
+    output = stream.read()
+    wait(proc)
+
+    return output
 
 def display(proc):
     stream = TextIOWrapper(proc.stdout,errors='ignore')
@@ -86,7 +89,7 @@ def make_lst_file(lsdvd):
                 print(fmt.format(title=title, name=name, ix=ix, h=int(h), m=int(m), s=s),file=f)
             
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("device", 
                             help="The block device containing the media",
@@ -110,3 +113,8 @@ if __name__ == "__main__":
     run(EJECT, device=device)
     
 
+if __name__ == "__main__":
+    try:
+        main()
+    except CalledProcessError as err:
+        print("Error:",str(err), file=sys.stderr)
