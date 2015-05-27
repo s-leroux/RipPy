@@ -11,7 +11,7 @@ import sys
 import os
 
 LSDVD="lsdvd -Oy {device}"
-DDRESCUE="ddrescue -MA {device} --block-size=2048 {title}.ISO {title}.LOG"
+DDRESCUE="ddrescue -MA {device} --block-size=2048 --timeout={timeout} {title}.ISO {title}.LOG"
 EJECT="eject {device}"
             
 def _pipe(cmd, stdout=PIPE, stderr=sys.stderr, args={}):
@@ -73,13 +73,13 @@ def make_lst_file(lsdvd):
     title = lsdvd['title']
     name = title.replace("_"," ").title()
 
-    fname = "{fname}.LST".format(fname=fname)
+    lstname = "{fname}.LST".format(fname=fname)
 
-    with open(fname, "at") as f:
+    with open(lstname, "at") as f:
         if f.tell() > 0:
             # File was already exisiting and not empty
             # Abort
-            print(fname, "already existing")
+            print(lstname, "already existing")
             return
 
         for ix, length in [(int(track['ix']), float(track['length']))
@@ -95,12 +95,16 @@ def main():
     parser.add_argument("--tag", 
                             help="Extra tag used when naming output file",
                             default="")
+    parser.add_argument("--timeout", 
+                            help="Read timeout for ddrescue",
+                            default="500s")
     parser.add_argument("device", 
                             help="The block device containing the media",
                             nargs='?',
                             default="/dev/sr0")
     args = parser.parse_args()
     device = args.device
+    timeout = args.timeout
 
     proc = pipe(LSDVD, device=device)
     rawdata = collect(proc)
@@ -118,7 +122,7 @@ def main():
         lsdvd['file'] = title
 
     make_lst_file(lsdvd)
-    run(DDRESCUE, device=device, title=lsdvd['file'])
+    run(DDRESCUE, device=device, title=lsdvd['file'], timeout=timeout)
     run(EJECT, device=device)
     
 

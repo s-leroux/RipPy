@@ -52,6 +52,8 @@ FFMPEG_VIDEO_DEINTERLACE = """ \\
             -filter:{ospec} [in]yadif=0:0:0[out]"""
 FFMPEG_VIDEO_ASPECT = """ \\
             -aspect:{ospec} {ratio}"""
+FFMPEG_VIDEO_CROP = """ \\
+            -filter:{ospec} 'crop={crop}'"""
 FFMPEG_AUDIO = """ \\
             -map 0:{ispec} \\
             -codec:{ospec} copy \\
@@ -142,6 +144,7 @@ class Metadata:
         self.f_episode = constantly(None)
         self.f_interlaced = constantly(False) # There is probable an heuristic
         self.f_aspect_ratio = constantly(None)
+        self.f_crop = constantly(None)
         self.f_probesize = constantly(2000)
         self.f_idxsize = constantly(50*1024)
         self.f_analyzeduration = duration_from_probesize
@@ -260,6 +263,9 @@ class Metadata:
 
     def interlaced(self):
         return self.f_interlaced(self)
+
+    def crop(self):
+        return self.f_crop(self)
 
     def aspect_ratio(self):
         return self.f_aspect_ratio(self)
@@ -663,6 +669,10 @@ def conv(meta, infile):
         cmd += FFMPEG_VIDEO_ASPECT.format(sspec="v:0", ospec="v:0",
                                                 ratio=meta.aspect_ratio())
 
+    if meta.crop():
+        cmd += FFMPEG_VIDEO_CROP.format(sspec="v:0", ospec="v:0",
+                                                crop=meta.crop())
+
     aid = 0
     for stream in meta._streams.all(st_type='a').fltr(pred.order_by('st_lang',
                                             meta._lcodes), pred.having('st_in_idx')):
@@ -826,6 +836,9 @@ if __name__ == "__main__":
     parser.add_argument("--aspect",
                             help="Force aspect ratio",
                             default=None)
+    parser.add_argument("--crop",
+                            help="Crop picture",
+                            default=None)
     parser.add_argument("--ss",
                             help="Start time",
                             default="00:00:00")
@@ -896,6 +909,8 @@ if __name__ == "__main__":
         meta.f_interlaced = constantly(args.interlaced)
     if args.aspect is not None:
         meta.f_aspect_ratio = constantly(args.aspect)
+    if args.crop is not None:
+        meta.f_crop = constantly(args.crop)
     if args.idxsize is not None:
         meta.f_idxsize = constantly(args.idxsize)
     if args.probesize is not None:
