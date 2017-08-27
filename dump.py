@@ -11,7 +11,7 @@ import sys
 import os
 
 LSDVD="lsdvd -Oy {device}"
-DDRESCUE="ddrescue -MA {device} --block-size=2048 --timeout={timeout} {title}.ISO {title}.LOG"
+DDRESCUE="ddrescue -MA {device} --sector-size=2048 --timeout={timeout} {title}.ISO {title}.LOG"
 EJECT="eject {device}"
             
 def _pipe(cmd, stdout=PIPE, stderr=sys.stderr, args={}):
@@ -92,6 +92,9 @@ def make_lst_file(lsdvd):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--title", 
+                            help="Force title",
+                            default="")
     parser.add_argument("--tag", 
                             help="Extra tag used when naming output file",
                             default="")
@@ -114,6 +117,9 @@ def main():
         rawdata = rawdata[8:]
 
     lsdvd = ast.literal_eval(rawdata)
+
+    if args.title:
+        lsdvd['title'] = args.title
 
     title = lsdvd['title']
     if args.tag:
