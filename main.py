@@ -4,7 +4,7 @@ import re
 import math
 import os, os.path
 import shutil
-from itertools import chain
+from itertools import chain, product, zip_longest
 from subprocess import Popen,call,PIPE
 from pipes import quote
 from io import StringIO, TextIOWrapper
@@ -95,6 +95,16 @@ MPLAYER_SUBTITLES_RE = re.compile(
 MPLAYER_CHAPTERS_RE = re.compile(
      "CHAPTERS: ((\d\d:\d\d:\d\d.\d\d\d,)*)")
 
+def zip_repeat(a, b):
+    olda = oldb = None
+    for ita, itb in zip_longest(a,b):
+        if ita:
+            olda = ita
+        if itb:
+            oldb = itb
+        yield (olda, oldb)
+        
+
 dry_run = False
 def call_it(cmd):
     if dry_run:
@@ -155,8 +165,8 @@ class Metadata:
     def initFromDVD(self):
         self.subformat = "copy" # prevent dvdsub -> dvdsub
 
-        for part in (p.strip() for p in self._fName.split("+")):
-            cmd = MPLAYER_GET_METADATA.format(fname=quote(part),dvd=quote(self._dvd))
+        for part in [p.strip() for p in self._fName.split("+")]:
+            cmd = MPLAYER_GET_METADATA.format(fname=quote(part),dvd=quote(self._dvd[-1]))
 
             proc = Popen(cmd,
                          stdout = PIPE,
@@ -241,7 +251,10 @@ class Metadata:
                 self._streams.append(**d)
 
                 if 'duration' in kv:
-                    self._metadata['LENGTH'] = float(kv['duration'])
+                    try:
+                        self._metadata['LENGTH'] = float(kv['duration'])
+                    except:
+                        pass
 
         print([i for i in meta._streams])
 
@@ -343,7 +356,9 @@ def dump(meta, infile):
 
     if reallyDump:
         i = 0
-        for part in (p.strip() for p in infile.split("+")):
+
+        parts = (p.strip() for p in infile.split("+"))
+        for dvd, part in zip_repeat(meta._dvd, parts):
             partfile = outfile+".{}".format(i)
             print("DUMP",part,"TO",partfile)
 
@@ -351,7 +366,7 @@ def dump(meta, infile):
 
             call_it(DUMP.format(infile = quote(part),
                                         outfile = quote(partfile),
-                                        dvd=quote(meta._dvd)))
+                                        dvd=quote(dvd)))
             
             if i == 0:
                 os.rename(partfile,outfile)
@@ -885,7 +900,7 @@ if __name__ == "__main__":
     print(args)
 
     meta = Metadata(args.infile)
-    meta._dvd = args.dvd_device
+    meta._dvd = [p.strip() for p in args.dvd_device.split("+")]
     meta._out_format = args.container
     meta._lcodes = args.lang.split(',')
     meta._tune = args.tune
@@ -941,7 +956,7 @@ if __name__ == "__main__":
     # actions.append(final_copy) ### <-- This was a "hack" to try to
                                  ### deal with "complex" matroska files
     actions.append(install)
-    if (meta._dvd.lower().endswith(".iso") or meta._dvd.startswith('/dev/')):
+    if (meta._dvd[-1].lower().endswith(".iso") or meta._dvd[-1].startswith('/dev/')):
         actions.append(clean_vob)
 
     infile = meta._fName
