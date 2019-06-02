@@ -35,10 +35,10 @@ FFPROBE_STREAM_INFO = """ffprobe \\
             -show_entries 'stream=index,codec_type,id' \\
             -i file:{fname}"""
 
-FFMPEG_IDET = """ffmpeg -filter:v idet -frames:v 5000 -an \\
+FFMPEG_IDET = """ffmpeg -nostdin -filter:v idet -frames:v 5000 -an \\
             -f rawvideo -y /dev/null -ss {ss} -i file:{fname} -ss 00:00:01 2>&1 | grep TFF"""
 
-FFMPEG = """ffmpeg -y  \\
+FFMPEG = """ffmpeg -nostdin -y \\
             -probesize {psize} -analyzeduration {aduration} \\
             {ff} \\
             -i file:{infile} -ss {ss}"""
@@ -68,7 +68,7 @@ FFMPEG_SUBTITLES = """ \\
 FFMPEG_OUTFILE=""" \\
             file:{outfile}"""
 
-FFMPEG_FINAL_COPY = """ ffmpeg -y -i file:{infile} \\
+FFMPEG_FINAL_COPY = """ ffmpeg -nostdin -y -i file:{infile} \\
             -map 0 -codec copy \\
             file:{outfile}"""
 
