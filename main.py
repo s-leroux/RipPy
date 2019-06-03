@@ -146,6 +146,7 @@ class Metadata:
         self._metadata = {}
         self._out_format = 'mkv'
         self._lcodes = ( 'fr', 'en' )
+        self._scodes = ( 'fr', 'en' )
         self._streams = rip.db.DB()
         self._chapters=set()
         self.f_volume = volume_from_metadata
@@ -700,7 +701,7 @@ def conv(meta, infile):
 
     sid = 0
     for stream in meta._streams.all(st_type='s').fltr(pred.order_by('st_lang',
-                                            meta._lcodes), pred.having('st_in_idx')):
+                                            meta._scodes), pred.having('st_in_idx')):
         if stream['st_id'] not in meta._kid:
             stream['st_out_idx'] = sid
             cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
@@ -839,8 +840,11 @@ if __name__ == "__main__":
                             help="Set the episode code (2x01 or s2e1)",
                             default=None)
     parser.add_argument("--lang",
-                            help="Langage code for tracks (audio+subtitles). Default 'fr,en'",
+                            help="Langage code for audio tracks. Default 'fr,en'",
                             default='fr,en')
+    parser.add_argument("--sub",
+                            help="Langage code for subtitle tracks. Default to --lang",
+                            default=None)
     parser.add_argument("--tune",
                             help="Tune for a specific media (default film)",
                             default="film")
@@ -903,6 +907,7 @@ if __name__ == "__main__":
     meta._dvd = [p.strip() for p in args.dvd_device.split("+")]
     meta._out_format = args.container
     meta._lcodes = args.lang.split(',')
+    meta._scodes = args.sub.split(',') if args.sub else meta._lcodes
     meta._tune = args.tune
     meta._force_dump = args.force_dump
     meta._force_conv = args.force_conv
