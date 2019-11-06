@@ -145,8 +145,8 @@ class Metadata:
         self._fName = fName
         self._metadata = {}
         self._out_format = 'mkv'
-        self._lcodes = ( 'fr', 'en' )
-        self._scodes = ( 'fr', 'en' )
+        self._lcodes = ( 'fr', 'en', 'unknown' )
+        self._scodes = ( 'fr', 'en', 'unknown' )
         self._streams = rip.db.DB()
         self._chapters=set()
         self.f_volume = volume_from_metadata
