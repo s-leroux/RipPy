@@ -109,10 +109,11 @@ dry_run = False
 def call_it(cmd):
     if dry_run:
         print(cmd)
+        return 0
     else:
         print("RUNNING:")
         print(cmd)
-        call(cmd,shell=True) # !!! this assume proper argument escaping !!!
+        return call(cmd,shell=True) # !!! this assume proper argument escaping !!!
 
 def volume_from_metadata(self):
     """Returns the disk title (based on DVD_VOLUME_ID)
@@ -714,7 +715,9 @@ def conv(meta, infile):
                                 idx_space=idx_space)
 
     if meta._force_conv or not os.path.exists(outfile):
-        call_it(cmd)
+        if call_it(cmd) != 0:
+            print("CONVERSION FAILED --- will use {f}".format(f=infile))
+            outfile = infile
 
     return outfile
 
@@ -723,6 +726,9 @@ def print_meta(meta, infile):
     return infile
 
 def chapters(meta,infile):
+    if not infile.endswith(".mkv"):
+        return infile
+
     chapfile = meta.name() + ".chp"
     makeBaseDir(chapfile)
 
@@ -740,7 +746,9 @@ def chapters(meta,infile):
     return infile
 
 def set_defaults(meta, infile):
-    # XXX should check if this is really a Matroska?
+    if not infile.endswith(".mkv"):
+        return infile
+
     cmd = MKVPROPEDIT.format(fname=quote(infile))
     for stream in meta._streams.all(st_type='s').fltr(pred.having('st_out_idx')):
         cmd += MKVPROPEDIT_TRACK.format(st_type=stream['st_type'],
@@ -764,6 +772,9 @@ def set_defaults(meta, infile):
     return infile
 
 def final_copy(meta, infile):
+    if not infile.endswith(".mkv"):
+        return infile
+
     #
     # Some software are unable to understand MKV files whose
     # stream header have been pushed to the end by `mkvpropedit`
@@ -784,6 +795,7 @@ def install(meta, infile):
     if meta._target is not None:
         dst = os.path.join(meta._target, infile)
         makeBaseDir(dst)
+        print("MOVING {f} to {d}".format(f=infile, d=dst))
         shutil.move(infile, dst)
 
     return infile
