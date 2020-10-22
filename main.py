@@ -798,14 +798,18 @@ def install(meta, infile):
     if meta._target is not None:
         dst = os.path.join(meta._target, infile)
         makeBaseDir(dst)
-        print("MOVING {f} to {d}".format(f=infile, d=dst))
-        shutil.move(infile, dst)
+        print("COPYING {f} to {d}".format(f=infile, d=dst))
+        shutil.copy2(infile, dst)
+        if not infile.endswith(".vob"):
+            print("REMOVING {f}".format(f=infile))
+            os.unlink(infile)
 
     return infile
 
 def clean_vob(meta,infile):
     title, _ = os.path.splitext(infile)
     vob = ".".join((title,"vob"))
+    print("REMOVING {f}".format(f=vob))
     os.unlink(vob)
 
     return infile
