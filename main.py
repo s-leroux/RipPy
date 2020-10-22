@@ -85,7 +85,7 @@ MKVPROPEDIT_CHAPTERS=""" \\
 
 MKVMERGE="""mkvmerge -o {dst} {src}"""
 
-FFMPEG_IDET_RE = re.compile(".*TFF:(\d+) BFF:(\d+) Progressive:(\d+) Undetermined:(\d+)""")
+FFMPEG_IDET_RE = re.compile(".*TFF:\s*(\d+)\s*BFF:\s*(\d+)\s*Progressive:\s*(\d+)\s*Undetermined:\s*(\d+)\s*""")
 MPLAYER_METADATA_RE = re.compile("ID_(\w+)=(.*)")
 MPLAYER_VIDEO_RE = re.compile(
      "ID_VIDEO_ID=(\d+)")
