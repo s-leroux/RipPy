@@ -612,10 +612,12 @@ def probe(meta, infile):
                      st_id, st_type, st_in_idx))
 
         stream = meta._streams.get(st_type=st_type,st_id=st_id)
-        if stream:
-            stream['st_in_idx'] = st_in_idx
+
+        if not stream:
+            print("Append missing stream 0x{:02x}".format(st_id))
+            meta._streams.append(st_type=st_type, st_id=st_id, st_lang="unknown",st_in_idx=st_in_idx)
         else:
-            print("Can't find stream 0x{:02x}".format(st_id))
+            stream['st_in_idx'] = st_in_idx
 
     print([i for i in meta._streams])
 
@@ -854,7 +856,7 @@ if __name__ == "__main__":
                             default=None)
     parser.add_argument("--lang",
                             help="Langage code for audio tracks. Default 'fr,en'",
-                            default='fr,en')
+                            default='fr,en,unknown')
     parser.add_argument("--sub",
                             help="Langage code for subtitle tracks. Default to --lang",
                             default=None)
