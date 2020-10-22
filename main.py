@@ -41,6 +41,7 @@ FFMPEG_IDET = """ffmpeg -nostdin -filter:v idet -frames:v 5000 -an \\
 FFMPEG = """ffmpeg -nostdin -y \\
             -probesize {psize} -analyzeduration {aduration} \\
             {ff} \\
+            -fix_sub_duration \\
             -i file:{infile} -ss {ss}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
