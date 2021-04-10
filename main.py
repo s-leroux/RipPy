@@ -21,6 +21,7 @@ MPLAYER_DUMP = """mplayer {infile} \\
 
 MPLAYER_DVD_DUMP = """mplayer {infile} \\
             -dvd-device {dvd} \\
+            -chapter {chapter} \\
             -dumpstream -dumpfile {outfile}"""
 
 FFPROBE_TS = """ffprobe \\
@@ -35,8 +36,10 @@ FFPROBE_STREAM_INFO = """ffprobe \\
             -show_entries 'stream=index,codec_type,id' \\
             -i file:{fname}"""
 
-FFMPEG_IDET = """ffmpeg -nostdin -filter:v idet -frames:v 5000 -an \\
-            -f rawvideo -y /dev/null -ss {ss} -i file:{fname} -ss 00:00:01 2>&1 | grep TFF"""
+FFMPEG_IDET = """ffmpeg -nostdin -filter:v idet -frames:v 20000 -an \\
+            -f rawvideo -y /dev/null -ss {ss} \\
+            -i file:{fname} \\
+            2>&1 | grep TFF"""
 
 FFMPEG = """ffmpeg -nostdin -y \\
             -probesize {psize} -analyzeduration {aduration} \\
@@ -362,13 +365,22 @@ def dump(meta, infile):
 
         parts = (p.strip() for p in infile.split("+"))
         for dvd, part in zip_repeat(meta._dvd, parts):
+            
             partfile = outfile+".{}".format(i)
             print("DUMP",part,"TO",partfile)
 
-            DUMP = MPLAYER_DVD_DUMP if part.startswith("dvd://") else MPLAYER_DUMP
+            if part.startswith("dvd://"):
+                part, sep, chapter = part.partition('#')
+                if chapter == "":
+                    chapter = "1"
+                DUMP = MPLAYER_DVD_DUMP
+            else:
+                chapter = None
+                DUMP = MPLAYER_DUMP
 
             call_it(DUMP.format(infile = quote(part),
                                         outfile = quote(partfile),
+                                        chapter = quote(chapter),
                                         dvd=quote(dvd)))
             
             if i == 0:
@@ -629,6 +641,7 @@ def idet(meta, infile):
 
     iframes, pframes = (0,0)
 
+    print("IDET CMD IS",cmd)
     proc = Popen(cmd,
                  stdout = PIPE,
                  shell=True) ### !!! This assume proper argument escaping

@@ -4,10 +4,9 @@ import fileinput
 from shlex import quote as quote
 
 for line in fileinput.input():
-    line = line.split('#',1)[0]
     line = line.strip()
 
-    if not line:
+    if not line or line[0]=="#":
         continue
 
     if line[0]=='@':
@@ -17,6 +16,8 @@ for line in fileinput.input():
 
     volume, iso, title, episode_or_year, name = (item.strip() 
                                 for item in line.split("|"))
+    name = name.split('#',1)[0]
+    name = name.strip()
 
     if not name:
         name = volume
