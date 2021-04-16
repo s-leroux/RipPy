@@ -42,6 +42,7 @@ FFMPEG_IDET = """ffmpeg -nostdin -filter:v idet -frames:v 20000 -an \\
             2>&1 | grep TFF"""
 
 FFMPEG = """ffmpeg -nostdin -y \\
+            -fflags +igndts \\
             -probesize {psize} -analyzeduration {aduration} \\
             {ff} \\
             -fix_sub_duration \\
@@ -60,7 +61,7 @@ FFMPEG_VIDEO_CROP = """ \\
             -filter:{ospec} 'crop={crop}'"""
 FFMPEG_AUDIO = """ \\
             -map 0:{ispec} \\
-            -codec:{ospec} copy \\
+            -codec:{ospec} {audioformat} \\
             -metadata:s:{ospec} language={lang}"""
 FFMPEG_SUBTITLES = """ \\
             -map 0:{ispec} \\
@@ -154,6 +155,10 @@ class Metadata:
         self._scodes = ( 'fr', 'en', 'unknown', 'xx' )
         self._streams = rip.db.DB()
         self._chapters=set()
+
+        self._subformat = "copy"
+        self._audioformat = "copy"
+
         self.f_volume = volume_from_metadata
         self.f_title = title_from_volume
         self.f_year = constantly(None)
@@ -166,10 +171,9 @@ class Metadata:
         self.f_analyzeduration = duration_from_probesize
         self.f_duration = duration_from_metadata
 
-        self.subformat = "dvdsub"
-
     def initFromDVD(self):
-        self.subformat = "copy" # prevent dvdsub -> dvdsub
+        # self.subformat = "copy" # prevent dvdsub -> dvdsub
+        self._subformat = "dvdsub" # prevent dvdsub -> dvdsub
 
         for part in [p.strip() for p in self._fName.split("+")]:
             cmd = MPLAYER_GET_METADATA.format(fname=quote(part),dvd=quote(self._dvd[-1]))
@@ -713,7 +717,8 @@ def conv(meta, infile):
             stream['st_out_idx'] = aid
             cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
                                            ospec = "a:"+str(aid),
-                                           lang = iso639_1_to_iso639_2(stream['st_lang']))
+                                           lang = iso639_1_to_iso639_2(stream['st_lang']),
+                                           audioformat=meta._audioformat)
             aid += 1
 
     sid = 0
@@ -724,7 +729,7 @@ def conv(meta, infile):
             cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
                                            ospec = "s:"+str(sid),
                                            lang = iso639_1_to_iso639_2(stream['st_lang']),
-                                           subformat=meta.subformat)
+                                           subformat=meta._subformat)
             sid += 1
 
     cmd += FFMPEG_OUTFILE.format(outfile=quote(outfile),
@@ -904,6 +909,12 @@ if __name__ == "__main__":
                             help="Set the idex (cues) size in bytes par hour",
                             type=int,
                             default=None)
+    parser.add_argument("--acodec",
+                            help="Set the audio codec (default media depedent)",
+                            default=None)
+    parser.add_argument("--scodec",
+                            help="Set the subtitle codec (default media depedent)",
+                            default=None)
     parser.add_argument("--container",
                             help="Set the container format (default mkv)",
                             default='mkv')
@@ -972,6 +983,12 @@ if __name__ == "__main__":
         meta.initFromTS()
     else:
         meta.initFromDVD()
+
+    # override options
+    if args.scodec is not None:
+        meta._subformat = args.scodec
+    if args.acodec is not None:
+        meta._audioformat = args.acodec
 
     actions = []
     if args.print_meta:
