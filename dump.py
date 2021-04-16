@@ -82,6 +82,7 @@ def make_lst_file(lsdvd):
             print(lstname, "already existing")
             return
 
+        print("@--tune film", file=f)
         for ix, length in [(int(track['ix']), float(track['length']))
                                 for track in lsdvd['track']]:
             if length > threshold:
