@@ -38,26 +38,45 @@ def load(title):
 
     return m
 
+class DB:
+    def __init__(self):
+        self.aliases = {}
+        self.db = {}
+
+    def alias(self, key, value):
+        self.aliases[key] = value
+
+    def title(self, serie, season, episode):
+        serie = self.aliases.get(serie, serie)
+        season=int(season)
+        episode=int(episode)
+        episodes = self.db.get(serie)
+        if episodes is None:
+            episodes = self.db[serie] = load(serie)
+
+        return episodes.get((season, episode))
+
 def main():
+    db = DB()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--alias", 
                             nargs='*',
+                            default=[],
                             help="Serie alias")
-    parser.add_argument("--dry", 
-                            action="store_true",
-                            help="Dry run")
+    parser.add_argument("--fix", 
+                            action="store_false",
+                            help="Fix missing titles")
     parser.add_argument("path", 
                             help="The directory containing files to rename",
                             )
     args = parser.parse_args()
     path = args.path
-    dry = args.dry
-    alias = {}
+    fix = args.fix
     for opt in args.alias:
         key, value = opt.split("=")
-        alias[key] = value
+        db.alias(key, value)
 
-    db = {}
     for root, dirs, files in os.walk(path):
         for fname in files:
             match = FFILTER.search(fname)
@@ -66,16 +85,10 @@ def main():
                 season = int(match.group(2))
                 episode = int(match.group(3))
 
-                query = alias.get(serie, serie)
-                episodes = db.get(query)
-                if episodes is None:
-                    episodes = db[serie] = load(serie)
-                    if episodes == {}:
-                        print("Not episode list found for",serie)
-                        print("May I suggest using --alias?")
-
-                title = episodes.get((season, episode))
-                if title:
+                title = db.title(serie, season, episode)
+                if not title:
+                    print("Not found:",serie,"episode ",season, episode)
+                else:
                     src = pathlib.Path(root,fname)
                     nname = "{serie}.{season}x{episode:02}.{title}{suffix}".format(
                             serie=serie,
@@ -89,7 +102,7 @@ def main():
                     
                     if not dst.exists():
                         print(src, "=>",dst.name)
-                        if not dry:
+                        if fix:
                             src.rename(dst)
 
 

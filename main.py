@@ -21,8 +21,11 @@ MPLAYER_DUMP = """mplayer {infile} \\
 
 MPLAYER_DVD_DUMP = """mplayer {infile} \\
             -dvd-device {dvd} \\
-            -chapter {chapter} \\
+            -chapter {chapter}-{chapter} \\
             -dumpstream -dumpfile {outfile}"""
+
+MPLAYER_DVD_DUMP_CHAPTER = MPLAYER_DVD_DUMP + """ \\
+            -dvd-device {dvd}"""
 
 FFPROBE_TS = """ffprobe \\
             -probesize {psize} -analyzeduration {aduration} \\
@@ -42,7 +45,6 @@ FFMPEG_IDET = """ffmpeg -nostdin -filter:v idet -frames:v 20000 -an \\
             2>&1 | grep TFF"""
 
 FFMPEG = """ffmpeg -nostdin -y \\
-            -fflags +igndts \\
             -probesize {psize} -analyzeduration {aduration} \\
             {ff} \\
             -fix_sub_duration \\
@@ -369,15 +371,16 @@ def dump(meta, infile):
 
         parts = (p.strip() for p in infile.split("+"))
         for dvd, part in zip_repeat(meta._dvd, parts):
-            
+            chapter = ""
             partfile = outfile+".{}".format(i)
             print("DUMP",part,"TO",partfile)
 
             if part.startswith("dvd://"):
                 part, sep, chapter = part.partition('#')
                 if chapter == "":
-                    chapter = "1"
-                DUMP = MPLAYER_DVD_DUMP
+                    DUMP = MPLAYER_DVD_DUMP
+                else:
+                    DUMP = MPLAYER_DVD_DUMP_CHAPTER
             else:
                 chapter = None
                 DUMP = MPLAYER_DUMP
@@ -738,6 +741,8 @@ def conv(meta, infile):
     if meta._force_conv or not os.path.exists(outfile):
         if call_it(cmd) != 0:
             print("CONVERSION FAILED --- will use {f}".format(f=infile))
+            print("REMOVING {f}".format(f=outfile))
+            os.unlink(outfile)
             outfile = infile
 
     return outfile
@@ -849,6 +854,7 @@ def clean_vob(meta,infile):
 # Main program
 #
 if __name__ == "__main__":
+    import sys; print(sys.argv)
     parser = argparse.ArgumentParser()
     parser.add_argument("infile", 
                             help="The video source to rip",
