@@ -8,7 +8,7 @@ from os.path import join
 import pathlib
 import re
 
-FFILTER = re.compile("(.*)[.](\d+)x(\d+)[.]\\1[.][^.]+")
+FFILTER = re.compile("(.*)[.](\d+)x(\d+)[.](.*)[.][^.]+")
 SINGLESEARCH_AP = "http://api.tvmaze.com/singlesearch/shows"
 
 def query(url, params={}, options={}):
@@ -29,12 +29,27 @@ def query(url, params={}, options={}):
         sleep *= 2
 
 def load(title):
-    m = {}
-    r = query(SINGLESEARCH_AP,dict(q=title, embed="episodes"))
-    
-    for ep in (r.json() or {}).get("_embedded",{}).get("episodes",[]):
-        m.setdefault(ep["season"], {})[ep["number"]] = dict(title=ep["name"], runtime=ep["runtime"])
+    def populate(src):
+        for ep in src:
+            m.setdefault(ep["season"], {})[ep["number"]] = dict(title=ep["name"], runtime=ep["runtime"])
 
+    m = {}
+    r = query(SINGLESEARCH_AP,dict(q=title, embed="alternatelists"))
+    
+    r = r.json() or {}
+    embedded = r.setdefault("_embedded", {})
+    alternatelists = embedded.setdefault("alternatelists", [])
+    ep_href = r["_links"]["self"]["href"]
+
+    r = query(ep_href + "/episodes")
+    populate(r.json() or [])
+
+    # Overwrite with data from alternatelists
+    for lst in alternatelists:
+        if lst["verbatim_order"]:
+            r = query(lst["_links"]["self"]["href"]+"/alternateepisodes")
+            populate(r.json() or [])
+            break
     return m
 
 class DB:
@@ -67,9 +82,12 @@ def main():
     parser.add_argument("--fix", 
                             action="store_true",
                             help="Fix missing titles")
-    parser.add_argument("--force", 
+    parser.add_argument("--rename", 
                             action="store_true",
                             help="Replace existing titles")
+    parser.add_argument("--force", 
+                            action="store_true",
+                            help="Replace existing files")
     parser.add_argument("path", 
                             help="The directory containing files to rename",
                             )
@@ -77,6 +95,7 @@ def main():
     path = args.path
     fix = args.fix
     force = args.force
+    rename = args.rename
     for opt in args.alias:
         key, value = opt.split("=")
         db.alias(key, value)
@@ -88,6 +107,10 @@ def main():
                 serie = match.group(1)
                 season = int(match.group(2))
                 episode = int(match.group(3))
+                title = match.group(4)
+
+                if not rename and title != serie:
+                    continue
 
                 title = db.title(serie, season, episode)
                 if not title:
