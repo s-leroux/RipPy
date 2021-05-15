@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import requests
 import time
 import argparse
@@ -31,10 +33,7 @@ def load(title):
     r = query(SINGLESEARCH_AP,dict(q=title, embed="episodes"))
     
     for ep in (r.json() or {}).get("_embedded",{}).get("episodes",[]):
-        key = (ep["season"], ep["number"])
-        title = ep["name"]
-
-        m[key] = title
+        m.setdefault(ep["season"], {})[ep["number"]] = dict(title=ep["name"], runtime=ep["runtime"])
 
     return m
 
@@ -54,7 +53,8 @@ class DB:
         if episodes is None:
             episodes = self.db[serie] = load(serie)
 
-        return episodes.get((season, episode))
+        ep = episodes.get(season, {}).get(episode)
+        return ep and ep["title"]
 
 def main():
     db = DB()
@@ -65,14 +65,18 @@ def main():
                             default=[],
                             help="Serie alias")
     parser.add_argument("--fix", 
-                            action="store_false",
+                            action="store_true",
                             help="Fix missing titles")
+    parser.add_argument("--force", 
+                            action="store_true",
+                            help="Replace existing titles")
     parser.add_argument("path", 
                             help="The directory containing files to rename",
                             )
     args = parser.parse_args()
     path = args.path
     fix = args.fix
+    force = args.force
     for opt in args.alias:
         key, value = opt.split("=")
         db.alias(key, value)
@@ -100,7 +104,7 @@ def main():
                     nname = nname.replace("\\","-")
                     dst = pathlib.Path(root, nname)
                     
-                    if not dst.exists():
+                    if force or not dst.exists():
                         print(src, "=>",dst.name)
                         if fix:
                             src.rename(dst)
