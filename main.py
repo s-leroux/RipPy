@@ -51,7 +51,7 @@ FFMPEG = """ffmpeg -nostdin -y \\
             -i file:{infile} -ss {ss}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
-            -codec:{ospec} libx264 \\
+            -codec:{ospec} {videoformat} \\
             -preset:{ospec} slow \\
             -tune:{ospec} {tune} \\
             -crf:{ospec} 20"""
@@ -153,13 +153,14 @@ class Metadata:
         self._fName = fName
         self._metadata = {}
         self._out_format = 'mkv'
-        self._lcodes = ( 'fr', 'en', 'unknown', 'xx' )
-        self._scodes = ( 'fr', 'en', 'unknown', 'xx' )
+        self._lcodes = ( 'fr', 'en', 'unknown', 'xx', 'qaa', 'qad' )
+        self._scodes = ( 'fr', 'en', 'unknown', 'xx', 'qaa', 'qad' )
         self._streams = rip.db.DB()
         self._chapters=set()
 
         self._subformat = "copy"
         self._audioformat = "copy"
+        self._videoformat = "libx264"
 
         self.f_volume = volume_from_metadata
         self.f_title = title_from_volume
@@ -592,10 +593,10 @@ iso639_2_to_iso639_1_map = dict((value,key) for key,value in iso639_1_to_iso639_
 iso639_2_to_iso639_1_map['fra'] = 'fr'
 
 def iso639_1_to_iso639_2(XX):
-    return iso639_1_to_iso639_2_map.get(XX, "")
+    return iso639_1_to_iso639_2_map.get(XX, XX)
 
 def iso639_2_to_iso639_1(XXX):
-    return iso639_2_to_iso639_1_map.get(XXX, "")
+    return iso639_2_to_iso639_1_map.get(XXX, XXX)
 
 def probe(meta, infile):
     """Probe a streams and try to match ids with their
@@ -699,7 +700,8 @@ def conv(meta, infile):
     if meta._to:
         cmd += " -to {to} ".format(to=quote(meta._to))
 
-    cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0", tune=meta._tune)
+    cmd += FFMPEG_VIDEO.format(ispec="v:0", ospec="v:0", tune=meta._tune,
+            videoformat=meta._videoformat)
     meta._streams.get(st_type='v')['st_out_idx'] = 0
 
     if meta.interlaced():
@@ -884,7 +886,7 @@ if __name__ == "__main__":
                             default=None)
     parser.add_argument("--lang",
                             help="Langage code for audio tracks. Default 'fr,en'",
-                            default='fr,en,unknown')
+                            default='fr,en,unknown,xx,qaa,qad')
     parser.add_argument("--sub",
                             help="Langage code for subtitle tracks. Default to --lang",
                             default=None)
@@ -914,6 +916,9 @@ if __name__ == "__main__":
     parser.add_argument("--idxsize",
                             help="Set the idex (cues) size in bytes par hour",
                             type=int,
+                            default=None)
+    parser.add_argument("--vcodec",
+                            help="Set the video codec (default libx264)",
                             default=None)
     parser.add_argument("--acodec",
                             help="Set the audio codec (default media depedent)",
@@ -995,6 +1000,8 @@ if __name__ == "__main__":
         meta._subformat = args.scodec
     if args.acodec is not None:
         meta._audioformat = args.acodec
+    if args.vcodec is not None:
+        meta._videoformat = args.vcodec
 
     actions = []
     if args.print_meta:
