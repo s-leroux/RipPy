@@ -11,7 +11,7 @@ import sys
 import os
 
 LSDVD="lsdvd -Oy {device}"
-DDRESCUE="ddrescue -MA {device} --sector-size=2048 --timeout={timeout} {title}.ISO {title}.LOG"
+DDRESCUE="ddrescue -MA {device} --no-scrap --timeout={timeout} --min-read-rate=128KiB --sector-size=2048 --skip-size=64KiB {title}.ISO {title}.LOG"
 EJECT="eject {device}"
             
 def _pipe(cmd, stdout=PIPE, stderr=sys.stderr, args={}):
@@ -101,7 +101,7 @@ def main():
                             default="")
     parser.add_argument("--timeout", 
                             help="Read timeout for ddrescue",
-                            default="500s")
+                            default="3000s")
     parser.add_argument("device", 
                             help="The block device containing the media",
                             nargs='?',
