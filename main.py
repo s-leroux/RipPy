@@ -10,7 +10,6 @@ from pipes import quote
 from io import StringIO, TextIOWrapper
 from rip import pred
 
-
 MPLAYER_GET_METADATA = """mplayer {fname} \\
         -dvd-device {dvd} \\
         -vo null -ao null -frames 0 \\
