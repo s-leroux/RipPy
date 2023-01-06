@@ -103,7 +103,7 @@ MPLAYER_CHAPTERS_RE = re.compile(
 
 NUKE_EXTRACT_VIDEO="""mencoder -vid 0 -nosound -ovc copy -of mpeg {infile} -o {outfile}"""
 NUKE_EXTRACT_AUDIO="""mencoder -aid {st_id} -ovc raw -oac copy -of rawaudio {infile} -o {outfile}"""
-NUKE_EXTRACT_ST="""ffmpeg -nostdin -y -i {infile} -codec:s -vn -an copy -map 0:'#{st_id}?' {outfile}"""
+NUKE_EXTRACT_ST="""ffmpeg -nostdin -y -i {infile} -codec:s copy -vn -an -map 0:'#{st_id}?' {outfile}"""
 
 def zip_repeat(a, b):
     olda = oldb = None
@@ -700,6 +700,7 @@ def nuke(meta, infile):
         #print(cmd)
         if call_it(cmd):
             stream['st_found'] = False
+            printf("DISCARD STREAM", st_id)
 
     # Recombine streams
     outputFileName = ".".join((meta.name(),"out","mp4"))
@@ -711,9 +712,12 @@ def nuke(meta, infile):
 
     for stream in streams_by_index:
         input = cmd.newInput(stream['st_fname'])
+        lang = stream.get('st_lang')
+
         output["opts"].append(("-map", '{:d}'.format(inputFileNum)))
         output["opts"].append(("-map_metadata", '{:d}:s'.format(inputFileNum)))
-        output["opts"].append(("-metadata:s:{:d}".format(outputStreamIndex), "language={}".format(stream['st_lang'])))
+        if lang:
+            output["opts"].append(("-metadata:s:{:d}".format(outputStreamIndex), "language={}".format(stream['st_lang'])))
         output["opts"].append(("-streamid", '{:d}:0x{:02x}'.format(outputStreamIndex, stream['st_id'])))
         inputFileNum += 1
         outputStreamIndex += 1
@@ -727,6 +731,7 @@ def nuke(meta, infile):
     for file in files:
       rm(file)
 
+    print("DONE", outputFileName)
     return outputFileName
 
 def idet(meta, infile):
@@ -804,9 +809,9 @@ def conv(meta, infile):
     aid = 0
     for stream in meta._streams.all(st_type='a').fltr(pred.order_by('st_lang',
                                             meta._lcodes), pred.having('st_in_idx')):
-        if stream['st_id'] not in meta._kid:
+        if stream['st_id'] not in meta._kid and stream['st_found']:
             stream['st_out_idx'] = aid
-            cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
+            cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}?'.format(stream['st_id'])),
                                            ospec = "a:"+str(aid),
                                            lang = iso639_1_to_iso639_2(stream['st_lang']),
                                            audioformat=meta._audioformat)
@@ -815,9 +820,9 @@ def conv(meta, infile):
     sid = 0
     for stream in meta._streams.all(st_type='s').fltr(pred.order_by('st_lang',
                                             meta._scodes), pred.having('st_in_idx')):
-        if stream['st_id'] not in meta._kid:
+        if stream['st_id'] not in meta._kid and stream['st_found']:
             stream['st_out_idx'] = sid
-            cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
+            cmd += FFMPEG_SUBTITLES.format(ispec = quote('#0x{:02x}?'.format(stream['st_id'])),
                                            ospec = "s:"+str(sid),
                                            lang = iso639_1_to_iso639_2(stream['st_lang']),
                                            subformat=meta._subformat)
