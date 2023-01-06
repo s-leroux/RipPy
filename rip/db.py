@@ -10,6 +10,12 @@ class DBIter:
     def __next__(self):
         return next(self._it)
 
+    def as_list(self):
+        return [i for i in self._it]
+
+    def sort(self, keyfct, reverse=False):
+        return DBIter(sorted(self._it, key=keyfct, reverse=reverse))
+
     def fltr(self, *filters):
         result = self
         for f in filters:
@@ -45,6 +51,9 @@ class DB:
 
     def append(self, **kwargs):
         self._db.append(kwargs)
+
+    def sort(self, keyfct, reverse=False):
+        return self.__iter__().sort(keyfct, reverse=reverse)
 
     def fltr(self, *preds):
         return self.__iter__().fltr(*preds)

@@ -101,6 +101,10 @@ MPLAYER_SUBTITLES_RE = re.compile(
 MPLAYER_CHAPTERS_RE = re.compile(
      "CHAPTERS: ((\d\d:\d\d:\d\d.\d\d\d,)*)")
 
+NUKE_EXTRACT_VIDEO="""mencoder -vid 0 -nosound -ovc copy -of mpeg {infile} -o {outfile}"""
+NUKE_EXTRACT_AUDIO="""mencoder -aid {st_id} -ovc raw -oac copy -of rawaudio {infile} -o {outfile}"""
+NUKE_EXTRACT_ST="""ffmpeg -nostdin -y -i {infile} -codec:s -vn -an copy -map 0:'#{st_id}?' {outfile}"""
+
 def zip_repeat(a, b):
     olda = oldb = None
     for ita, itb in zip_longest(a,b):
@@ -119,7 +123,17 @@ def call_it(cmd):
     else:
         print("RUNNING:")
         print(cmd)
-        return call(cmd,shell=True) # !!! this assume proper argument escaping !!!
+        status = call(cmd,shell=True) # !!! this assume proper argument escaping !!!
+        if status:
+            print("NON-NUL EXIT STATUS: "+str(status))
+            print("WHILE RUNNING:")
+            print(cmd)
+
+        return status
+
+def rm(filePath):
+    print("REMOVING {f}".format(f=filePath))
+    return os.unlink(filePath)
 
 def volume_from_metadata(self):
     """Returns the disk title (based on DVD_VOLUME_ID)
@@ -191,9 +205,10 @@ class Metadata:
                     self._metadata[key] = value
                     # continue
 
+                # At this point, we don't have access to the stream id
                 match = MPLAYER_VIDEO_RE.match(line)
                 if match:
-                    idx = match.groups()
+                    idx,  = match.groups()
                     self._streams.append(st_type='v',
                                          st_in_idx=idx)
                     continue
@@ -252,7 +267,7 @@ class Metadata:
                     else 's' if kv['codec_type'] == 'subtitle' \
                     else '?'
 
-                d = {'st_type': t, 'st_in_idx': idx, 'st_id': int(kv['id'],base=0)}
+                d = {'st_type': t, 'st_in_idx': idx, 'st_id': int(kv['id'],base=0), 'st_found': True}
                 if t == 'a':
                     d['aid'] = int(kv['id'],base=0)
 
@@ -622,6 +637,9 @@ def probe(meta, infile):
         elif codec_type == 'subtitle':
             st_type = 's'
             st_id = int(tail[0],base=0)
+        elif codec_type == 'video':
+            st_type = 'v'
+            st_id = int(tail[0],base=0)
         else:
             continue
 
@@ -632,15 +650,84 @@ def probe(meta, infile):
 
         stream = meta._streams.get(st_type=st_type,st_id=st_id)
 
+        # The video stream is a special case as we don't have its stream ID
+        # Assume there is only one vidoe stream
+        if not stream and st_type=='v':
+            stream = meta._streams.get(st_type='v')
+
         if not stream:
             print("Append missing stream 0x{:02x}".format(st_id))
-            meta._streams.append(st_type=st_type, st_id=st_id, st_lang="unknown",st_in_idx=st_in_idx)
+            meta._streams.append(st_type=st_type, st_id=st_id, st_lang="unknown",st_in_idx=st_in_idx,st_found=True)
         else:
             stream['st_in_idx'] = st_in_idx
+            stream['st_found'] = True
+            if 'st_id' not in stream:
+                stream['st_id'] = st_id
+            if stream['st_id'] != st_id:
+                abort("Stream id mismatch: " + str(st_id) + str(stream))
 
     print([i for i in meta._streams])
 
     return infile
+
+def abort(message):
+    print(message)
+    exit(1)
+
+from rip import ffmpeg
+def nuke(meta, infile):
+    # Extract each stream into its own file
+    files = []
+    for stream in meta._streams.all(st_found=True):
+        print(stream)
+        st_id = stream['st_id']
+        st_type = stream['st_type']
+        
+        ext = "m4v" if st_type=='v' else "mp4"
+        fname = ".".join((meta.name(),str(st_id),ext))
+        files.append(fname)
+        stream['st_fname'] = fname
+        
+        if st_type == 'v':
+            cmd = NUKE_EXTRACT_VIDEO.format(infile=quote(infile), outfile=quote(fname))
+        elif st_type == 'a':
+            cmd = NUKE_EXTRACT_AUDIO.format(infile=quote(infile), st_id=st_id, outfile=quote(fname))
+        elif st_type == 's':
+            cmd = NUKE_EXTRACT_ST.format(infile=quote(infile), st_id=st_id, outfile=quote(fname))
+        else:
+            abort("I don't know how to handle stream " + str(stream))
+
+        #print(cmd)
+        if call_it(cmd):
+            stream['st_found'] = False
+
+    # Recombine streams
+    outputFileName = ".".join((meta.name(),"out","mp4"))
+    streams_by_index = meta._streams.all(st_found=True).sort(lambda item : item['st_in_idx']).as_list()
+    cmd = ffmpeg.new()
+    output = cmd.setOutput(outputFileName)
+    inputFileNum = 0
+    outputStreamIndex = 0
+
+    for stream in streams_by_index:
+        input = cmd.newInput(stream['st_fname'])
+        output["opts"].append(("-map", '{:d}'.format(inputFileNum)))
+        output["opts"].append(("-map_metadata", '{:d}:s'.format(inputFileNum)))
+        output["opts"].append(("-metadata:s:{:d}".format(outputStreamIndex), "language={}".format(stream['st_lang'])))
+        output["opts"].append(("-streamid", '{:d}:0x{:02x}'.format(outputStreamIndex, stream['st_id'])))
+        inputFileNum += 1
+        outputStreamIndex += 1
+
+    output["opts"].append(("-c:v", "copy"))
+    output["opts"].append(("-c:a", "copy"))
+    output["opts"].append(("-c:s", "copy"))
+
+    call_it(cmd.cmd())
+
+    for file in files:
+      rm(file)
+
+    return outputFileName
 
 def idet(meta, infile):
     print("Testing if interlaced")
@@ -945,6 +1032,10 @@ if __name__ == "__main__":
                             help="Force re-encoding",
                             action='store_true',
                             default=False)
+    parser.add_argument("--nuke", 
+                            help="Break the VOB file into individual streams then rebuild it. Fix some PTS issues",
+                            action='store_true',
+                            default=False)
     parser.add_argument("--ff", 
                             help="Raw argments passed to ffmpeg *unquoted*",
                             default='')
@@ -956,6 +1047,7 @@ if __name__ == "__main__":
 
     print(args)
 
+    dry_run = args.dry or False
     meta = Metadata(args.infile)
     meta._dvd = [p.strip() for p in args.dvd_device.split("+")]
     meta._out_format = args.container
@@ -1010,6 +1102,8 @@ if __name__ == "__main__":
     actions.append(idet)
     if not args.ts:
         actions.append(probe)
+    if args.nuke:
+        actions.append(nuke)
     actions.append(conv)
     if not args.ts:
         actions.append(chapters) 

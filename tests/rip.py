@@ -17,6 +17,15 @@ class TestRipDB(unittest.TestCase):
         for item in self.coll:
             self.db.append(**item)
 
+    def test_sort(self):
+        result = self.db.sort(lambda item: item['st_lang']+item['st_type'])
+        expected = [
+            self.sub_de, 
+            self.audio_en, self.sub_en,
+            self.audio_fr, self.sub_fr
+        ]
+        self.assertEqual(result.as_list(), expected)
+        
     def test_get(self):
         """'get' an item based on an unique key
         """
