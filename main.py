@@ -16,9 +16,11 @@ MPLAYER_GET_METADATA = """mplayer {fname} \\
         -identify """
 
 MPLAYER_DUMP = """mplayer {infile} \\
+            -nocache \\
             -dumpstream -dumpfile {outfile}"""
 
 MPLAYER_DVD_DUMP = """mplayer {infile} \\
+            -nocache \\
             -dvd-device {dvd} \\
             -chapter {chapter}-{chapter} \\
             -dumpstream -dumpfile {outfile}"""
@@ -101,8 +103,8 @@ MPLAYER_SUBTITLES_RE = re.compile(
 MPLAYER_CHAPTERS_RE = re.compile(
      "CHAPTERS: ((\d\d:\d\d:\d\d.\d\d\d,)*)")
 
-NUKE_EXTRACT_VIDEO="""mencoder -vid 0 -nosound -ovc copy -of mpeg {infile} -o {outfile}"""
-NUKE_EXTRACT_AUDIO="""mencoder -aid {st_id} -ovc raw -oac copy -of rawaudio {infile} -o {outfile}"""
+NUKE_EXTRACT_VIDEO="""mencoder -mc 10 -vid 0 -nosound -ovc copy -of mpeg {infile} -o {outfile}"""
+NUKE_EXTRACT_AUDIO="""mencoder -mc 10 -aid {st_id} -ovc raw -oac copy -of rawaudio {infile} -o {outfile}"""
 NUKE_EXTRACT_ST="""ffmpeg -nostdin -y -i {infile} -codec:s copy -vn -an -map 0:'#{st_id}' {outfile}"""
 
 def zip_repeat(a, b):
@@ -146,7 +148,10 @@ def title_from_volume(self):
     return self.volume()
 
 def duration_from_metadata(self):
-    return float(self._metadata["LENGTH"])
+    if "LENGTH" in self._metadata:
+        return float(self._metadata["LENGTH"])
+    else:
+        return 1*3600. + 40*60. # hardcoded default
 
 def duration_from_probesize(self):
     return self.probesize()//2
@@ -390,7 +395,7 @@ def dump(meta, infile):
             partfile = outfile+".{}".format(i)
             print("DUMP",part,"TO",partfile)
 
-            if part.startswith("dvd://"):
+            if part.startswith("dvd://") or part.startswith("dvdnav://"):
                 part, sep, chapter = part.partition('#')
                 if chapter == "":
                     DUMP = MPLAYER_DVD_DUMP
@@ -700,7 +705,7 @@ def nuke(meta, infile):
         #print(cmd)
         if call_it(cmd):
             stream['st_found'] = False
-            printf("DISCARD STREAM", st_id)
+            print("DISCARD STREAM", st_id)
 
     # Recombine streams
     outputFileName = ".".join((meta.name(),"out","vob"))
