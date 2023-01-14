@@ -66,15 +66,20 @@ def run_and_display(cmd, **kwargs):
     display(pipe(cmd, **kwargs))
 
 def make_lst_file(lsdvd):
-    fmt = "{name:25s} | {fname:>12s}.ISO | dvd://{ix:<3d} | 2000 | # {h:3d}:{m:02d}:{s:04.1f}"
+    fmt = "{name:25s} | {fname:>16s} | dvdnav://{ix:<3d} | 2000 | # {h:3d}:{m:02d}:{s:04.1f}"
     threshold = 60*4 # four minutes
 
-    fname = lsdvd['file']
+    stem = lsdvd['file']
+    if lsdvd['device']:
+        fname = lsdvd['device']
+    else:
+        fname = lsdvd['file'] + '.ISO'
+
     title = lsdvd['title']
     name = title.replace("_"," ").title()
 
-    lstname = "{fname}.LST".format(fname=fname)
-
+    lstname = "{fname}.LST".format(fname=stem)
+    print("WRITING", lstname)
     with open(lstname, "at") as f:
         if f.tell() > 0:
             # File was already exisiting and not empty
@@ -93,6 +98,10 @@ def make_lst_file(lsdvd):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--nodump", 
+                            help="Don't run ddrescue",
+                            action='store_true',
+                            default=False)
     parser.add_argument("--title", 
                             help="Force title",
                             default="")
@@ -109,6 +118,7 @@ def main():
     args = parser.parse_args()
     device = args.device
     timeout = args.timeout
+    nodump = args.nodump
 
     proc = pipe(LSDVD, device=device)
     rawdata = collect(proc)
@@ -123,14 +133,20 @@ def main():
         lsdvd['title'] = args.title
 
     title = lsdvd['title']
+    if nodump:
+        lsdvd['device'] = device
+    else:
+        lsdvd['device'] = None
+
     if args.tag:
         lsdvd['file'] = "-".join((title, args.tag))
     else:
         lsdvd['file'] = title
 
     make_lst_file(lsdvd)
-    run(DDRESCUE, device=device, title=lsdvd['file'], timeout=timeout)
-    run(EJECT, device=device)
+    if not nodump:
+        run(DDRESCUE, device=device, title=lsdvd['file'], timeout=timeout)
+        run(EJECT, device=device)
     
 
 if __name__ == "__main__":
