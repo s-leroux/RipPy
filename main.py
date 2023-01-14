@@ -197,6 +197,7 @@ class Metadata:
         self._subformat = "dvdsub" # prevent dvdsub -> dvdsub
 
         for part in [p.strip() for p in self._fName.split("+")]:
+            part, *_ = part.split("#") # ignore chapter
             cmd = MPLAYER_GET_METADATA.format(fname=quote(part),dvd=quote(self._dvd[-1]))
 
             proc = Popen(cmd,
@@ -227,15 +228,17 @@ class Metadata:
 
                 match = MPLAYER_AUDIO_RE.match(line)
                 if match:
+                    print("MPLAYER_AUDIO_RE", match.groups())
                     idx, fmt, lang, aid = match.groups()
                     self._streams.append(st_type='a',
+                                         st_fmt=fmt,
                                          st_lang=lang,
                                         # st_in_idx=idx, # <-- not a good idea
                                         # to store "streeam index" from
                                         # mplayer
                                          st_id=int(aid))
                     continue
-
+                
                 match = MPLAYER_SUBTITLES_RE.match(line)
                 if match:
                     sid, lang = match.groups()
@@ -275,6 +278,7 @@ class Metadata:
                 d = {'st_type': t, 'st_in_idx': idx, 'st_id': int(kv['id'],base=0), 'st_found': True}
                 if t == 'a':
                     d['aid'] = int(kv['id'],base=0)
+                    d['st_fmt'] = None # Can we detect the audio format?
 
                 l = kv.get('language')
                 if l is not None:
@@ -816,10 +820,17 @@ def conv(meta, infile):
                                             meta._lcodes), pred.having('st_in_idx')):
         if stream['st_id'] not in meta._kid and stream['st_found']:
             stream['st_out_idx'] = aid
+            audioformat = meta._audioformat
+
+            #
+            # mkv containers cannot store pcm_dvd data. Convert to pcm_s16le if not otherwise specified
+            if audioformat == "copy":
+                if stream['st_fmt'].startswith("lpcm"):
+                    audioformat = "pcm_s16le"
             cmd += FFMPEG_AUDIO.format(ispec = quote('#0x{:02x}'.format(stream['st_id'])),
                                            ospec = "a:"+str(aid),
                                            lang = iso639_1_to_iso639_2(stream['st_lang']),
-                                           audioformat=meta._audioformat)
+                                           audioformat=audioformat)
             aid += 1
 
     sid = 0
