@@ -66,7 +66,7 @@ def run_and_display(cmd, **kwargs):
     display(pipe(cmd, **kwargs))
 
 def make_lst_file(lsdvd):
-    fmt = "{name:25s} | {fname:>16s} | dvdnav://{ix:<3d} | 2000 | # {h:3d}:{m:02d}:{s:04.1f}"
+    fmt = "{name:25s} | {fname:>16s} | dvd://{ix:<3d} | 2000 | # {h:3d}:{m:02d}:{s:04.1f}"
     threshold = 60*4 # four minutes
 
     stem = lsdvd['file']
