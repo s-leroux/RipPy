@@ -22,7 +22,7 @@ MPLAYER_DUMP = """mplayer {infile} \\
 MPLAYER_DVD_DUMP = """mplayer {infile} \\
             -nocache \\
             -dvd-device {dvd} \\
-            -chapter {chapter}-{chapter} \\
+            -chapter {chapter} \\
             -dumpstream -dumpfile {outfile}"""
 
 MPLAYER_DVD_DUMP_CHAPTER = MPLAYER_DVD_DUMP + """ \\
@@ -405,6 +405,10 @@ def dump(meta, infile):
                     DUMP = MPLAYER_DVD_DUMP
                 else:
                     DUMP = MPLAYER_DVD_DUMP_CHAPTER
+
+                    # chapter of the form "#n" becomes "n-n" to match mplayer's syntax
+                    if "-" not in chapter:
+                        chapter = chapter + "-" + chapter
             else:
                 chapter = None
                 DUMP = MPLAYER_DUMP
