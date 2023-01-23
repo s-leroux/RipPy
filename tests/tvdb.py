@@ -14,7 +14,8 @@ class TestTvdb(unittest.TestCase):
             {'id': 'wacky-races-2017', 'title': 'Wacky Races (2017)'},
         ]
 
-        actual = tvdb.search(SERIES)
+        provider = tvdb.TVDB()
+        actual = provider.search(SERIES)
         self.assertListEqual(actual, expected)
 
 if __name__ == '__main__':

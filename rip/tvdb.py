@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-import requests
 import time
 import argparse
 import os
@@ -29,51 +28,35 @@ class Browser:
 
     def get(self, endpoint, params):
         url = urlencode(endpoint, params)
-        print("will get", url)
         self.driver.get(url)
-        print("done get")
         return self.driver.page_source
 
-def query(url, params={}, options={}):
-    retries = options.get("retries", 6)
-    sleep = options.get("sleep", 0.5)
+class TVDB:
+    def __init__(self):
+        self.browser = Browser()
 
-    n = 0
+    def search(self, title):
+        """ Query the TVDB search page to find results matching
+            the given human-readable title.
 
-    while True:
-        n += 1
-        r = requests.get(url, params)
-        if n > retries:
-            return r
-        if (200 <= r.status_code < 500) and r.status_code != 429:
-            return r
+            Return a (possibly empty) array of results.
+        """
+        html = self.browser.get(SEARCH_AP,dict(query=title))
 
-        time.sleep(sleep)
-        sleep *= 2
+        # Process the HTML page
+        soup = BeautifulSoup(html, "lxml")
+        hits = soup.find(id="hits")
+        links = hits.find_all("a", href=SERIES_RE)
+        result = []
+        for link in links:
+            title = link.text
+            if title != "":
+                result.append(dict(
+                    id=link["href"].replace("/series/",""),
+                    title=link.text,
+                ))
 
-def search(title):
-    """ Query the TVDB search page to find results matching
-        the given human-readable title.
-
-        Return a (possibly empty) array of results.
-    """
-    browser = Browser()
-    html = browser.get(SEARCH_AP,dict(query=title))
-
-    # Process the HTML page
-    soup = BeautifulSoup(html, "lxml")
-    hits = soup.find(id="hits")
-    links = hits.find_all("a", href=SERIES_RE)
-    result = []
-    for link in links:
-        title = link.text
-        if title != "":
-            result.append(dict(
-                id=link["href"].replace("/series/",""),
-                title=link.text,
-            ))
-
-    return result
+        return result
 
 def load(title):
     def populate(src):
