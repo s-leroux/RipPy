@@ -12,6 +12,9 @@ from selenium import webdriver
 SEARCH_AP = "https://thetvdb.com/search"
 SERIES_RE = re.compile("/series/")
 
+EPISODES_AP = "https://thetvdb.com/series/{id}/allseasons/official"
+EPISODE_RE = re.compile("/series/[^/]+/episodes/[0-9]+")
+
 import urllib.parse
 def urlencode(endpoint, params):
     querystring = urllib.parse.urlencode(params)
@@ -26,8 +29,8 @@ class Browser:
 
         self.driver = webdriver.Chrome("chromedriver", options=options)
 
-    def get(self, endpoint, params):
-        url = urlencode(endpoint, params)
+    def get(self, endpoint, params = None):
+        url = endpoint if not params else urlencode(endpoint, params)
         self.driver.get(url)
         return self.driver.page_source
 
@@ -57,6 +60,26 @@ class TVDB:
                 ))
 
         return result
+
+    def episodes(self, id):
+        html = self.browser.get(EPISODES_AP.format(id=id))
+        soup = BeautifulSoup(html, "lxml")
+        links = soup.find_all("a", href=EPISODE_RE)
+        episodes = {}
+        for link in links:
+            title = link.text.strip()
+            parent = link.parent
+            m = re.search("(\d+)x(\d+)", parent.text) or re.search("S(\d+)E(\d+)", parent.text)
+            if m:
+                season_num, episode_num = m.groups()
+                season_num = int(season_num)
+                episode_num = int(episode_num)
+                
+                season = episodes.setdefault(season_num, {})
+                episode = season.setdefault(episode_num, {})
+                episode["title"] = title
+
+        return episodes
 
 def load(title):
     def populate(src):
@@ -90,7 +113,7 @@ class DB:
     def alias(self, key, value):
         self.aliases[key] = value
 
-    def title(self, serie, season, episode):
+    def episodes(self, serie, season, episode):
         serie = self.aliases.get(serie, serie)
         season=int(season)
         episode=int(episode)
