@@ -44,12 +44,18 @@ class TVDB:
 
             Return a (possibly empty) array of results.
         """
-        html = self.browser.get(SEARCH_AP,dict(query=title))
+        retries = 3
+        links = []
 
-        # Process the HTML page
-        soup = BeautifulSoup(html, "lxml")
-        hits = soup.find(id="hits")
-        links = hits.find_all("a", href=SERIES_RE)
+        while retries and not len(links):
+            retries -= 1
+            html = self.browser.get(SEARCH_AP,dict(query=title))
+
+            # Process the HTML page
+            soup = BeautifulSoup(html, "lxml")
+            hits = soup.find(id="hits")
+            links = hits.find_all("a", href=SERIES_RE)
+
         result = []
         for link in links:
             title = link.text
@@ -82,28 +88,14 @@ class TVDB:
         return episodes
 
 def load(title):
-    def populate(src):
-        for ep in src:
-            m.setdefault(ep["season"], {})[ep["number"]] = dict(title=ep["name"], runtime=ep["runtime"])
+    tvdb = TVDB()
+    matches = tvdb.search(title)
+    try:
+        id = matches[0]["id"];
+    except IndexError:
+        return {}
 
-    m = {}
-    r = query(SINGLESEARCH_AP,dict(q=title, embed="alternatelists"))
-    
-    r = r.json() or {}
-    embedded = r.setdefault("_embedded", {})
-    alternatelists = embedded.setdefault("alternatelists", [])
-    ep_href = r["_links"]["self"]["href"]
-
-    r = query(ep_href + "/episodes")
-    populate(r.json() or [])
-
-    # Overwrite with data from alternatelists
-    for lst in alternatelists:
-        if lst["verbatim_order"]:
-            r = query(lst["_links"]["self"]["href"]+"/alternateepisodes")
-            populate(r.json() or [])
-            break
-    return m
+    return tvdb.episodes(id);
 
 class DB:
     def __init__(self):
