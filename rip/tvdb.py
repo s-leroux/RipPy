@@ -102,9 +102,6 @@ class DB:
         self.cache = {}
         self.provider = TVDB()
 
-    def alias(self, key, value):
-        self.aliases[key] = value
-
     def episodes(self, name, season, episode):
         season=int(season)
         episode=int(episode)
@@ -141,9 +138,10 @@ def main():
     fix = args.fix
     force = args.force
     rename = args.rename
+    alias = {}
     for opt in args.alias:
         key, value = opt.split("=")
-        db.alias(key, value)
+        alias[key]=value
 
     for root, dirs, files in os.walk(path):
         for fname in files:
@@ -157,7 +155,7 @@ def main():
                 if not rename and title != serie:
                     continue
 
-                title = db.title(serie, season, episode)
+                title = db.title(alias.get(serie) or serie, season, episode)
                 if not title:
                     print("Not found:",serie,"episode ",season, episode)
                 else:
