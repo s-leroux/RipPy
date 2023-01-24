@@ -8,6 +8,7 @@ import pathlib
 import re
 from bs4 import BeautifulSoup
 from selenium import webdriver
+import atexit
 
 SEARCH_AP = "https://thetvdb.com/search"
 SERIES_RE = re.compile("/series/")
@@ -29,9 +30,13 @@ class Browser:
         options.add_argument('--blink-settings=imagesEnabled=false')
         self.driver = webdriver.Chrome("chromedriver", options=options)
 
+        atexit.register(self.close)
+
     def close(self):
-        self.driver.close()
-        self.driver.quit()
+        if self.driver:
+            self.driver.close()
+            self.driver.quit()
+            self.driver = None
 
     def get(self, endpoint, params = None):
         url = endpoint if not params else urlencode(endpoint, params)
