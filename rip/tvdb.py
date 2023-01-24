@@ -29,6 +29,10 @@ class Browser:
 
         self.driver = webdriver.Chrome("chromedriver", options=options)
 
+    def close(self):
+        self.driver.close()
+        self.driver.quit()
+
     def get(self, endpoint, params = None):
         url = endpoint if not params else urlencode(endpoint, params)
         self.driver.get(url)
@@ -37,6 +41,9 @@ class Browser:
 class TVDB:
     def __init__(self):
         self.browser = Browser()
+
+    def close(self):
+        self.browser.close()
 
     def search(self, title):
         """ Query the TVDB search page to find results matching
@@ -101,6 +108,9 @@ class DB:
     def __init__(self):
         self.cache = {}
         self.provider = TVDB()
+
+    def close(self):
+        self.provider.close()
 
     def title(self, name, season, episode):
         season=int(season)

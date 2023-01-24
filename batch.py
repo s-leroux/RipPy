@@ -57,5 +57,7 @@ for line in fileinput.input():
                      title=quote(title),
                      episode_or_year=quote(episode_or_year),
                      extra=extra)
+    #print(cmd)
     os.system(cmd)
 
+db.close()
