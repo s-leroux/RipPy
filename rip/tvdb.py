@@ -26,7 +26,7 @@ class Browser:
         options.add_argument('--ignore-certificate-errors')
         options.add_argument('--incognito')
         options.add_argument('--headless')
-
+        options.add_argument('--blink-settings=imagesEnabled=false')
         self.driver = webdriver.Chrome("chromedriver", options=options)
 
     def close(self):
@@ -116,7 +116,7 @@ class DB:
         season=int(season)
         episode=int(episode)
         episodes = self.cache.get(name)
-        if not episodes:
+        if episodes is None: # test for None because {} is falsy
             # not yet loaded (or empty?)
             episodes = self.cache[name] = self.provider.load(name)
 
