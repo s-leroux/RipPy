@@ -87,31 +87,31 @@ class TVDB:
 
         return episodes
 
-def load(title):
-    tvdb = TVDB()
-    matches = tvdb.search(title)
-    try:
-        id = matches[0]["id"];
-    except IndexError:
-        return {}
+    def load(self, title):
+        tvdb = TVDB()
+        matches = self.search(title)
+        try:
+            id = matches[0]["id"];
+        except IndexError:
+            return {}
 
-    return tvdb.episodes(id);
+        return self.episodes(id);
 
 class DB:
     def __init__(self):
-        self.aliases = {}
-        self.db = {}
+        self.cache = {}
+        self.provider = TVDB()
 
     def alias(self, key, value):
         self.aliases[key] = value
 
-    def episodes(self, serie, season, episode):
-        serie = self.aliases.get(serie, serie)
+    def episodes(self, name, season, episode):
         season=int(season)
         episode=int(episode)
-        episodes = self.db.get(serie)
-        if episodes is None:
-            episodes = self.db[serie] = load(serie)
+        episodes = self.cache.get(name)
+        if not episodes:
+            # not yet loaded (or empty?)
+            episodes = self.cache[name] = self.provider.load(name)
 
         ep = episodes.get(season, {}).get(episode)
         return ep and ep["title"]

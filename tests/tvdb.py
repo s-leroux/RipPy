@@ -75,8 +75,17 @@ class TestTvdb(unittest.TestCase):
         self.assertDictEqual(actual, self.EPISODES)
 
     def test_load(self):
-        actual = tvdb.load(self.TVSHOW)
+        provider = tvdb.TVDB()
+        actual = provider.load(self.TVSHOW)
         self.assertDictEqual(actual, self.EPISODES)
+
+class TestDb(unittest.TestCase):
+    def test_episodes(self):
+        db = tvdb.DB()
+        SEASON=1
+        EPISODE=5
+        title = db.episodes(TestTvdb.TVSHOW, SEASON, EPISODE)
+        self.assertEqual(title, TestTvdb.EPISODES[SEASON][EPISODE]["title"])
 
 if __name__ == '__main__':
     unittest.main()
