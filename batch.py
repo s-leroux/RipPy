@@ -2,9 +2,9 @@ import os
 import re
 import fileinput
 from shlex import quote as quote
-import eptitle
+from rip import tvdb
 
-db = eptitle.DB()
+db = tvdb.DB()
 extra=""
 
 for line in fileinput.input():

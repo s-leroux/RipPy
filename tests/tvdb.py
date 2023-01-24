@@ -84,7 +84,7 @@ class TestDb(unittest.TestCase):
         db = tvdb.DB()
         SEASON=1
         EPISODE=5
-        title = db.episodes(TestTvdb.TVSHOW, SEASON, EPISODE)
+        title = db.title(TestTvdb.TVSHOW, SEASON, EPISODE)
         self.assertEqual(title, TestTvdb.EPISODES[SEASON][EPISODE]["title"])
 
 if __name__ == '__main__':

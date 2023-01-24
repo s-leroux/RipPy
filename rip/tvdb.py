@@ -102,7 +102,7 @@ class DB:
         self.cache = {}
         self.provider = TVDB()
 
-    def episodes(self, name, season, episode):
+    def title(self, name, season, episode):
         season=int(season)
         episode=int(episode)
         episodes = self.cache.get(name)
