@@ -11,7 +11,7 @@ import sys
 import os
 
 LSDVD="lsdvd -Oy {device}"
-DDRESCUE="ddrescue -MA {device} --no-scrap --timeout={timeout} --min-read-rate=64KiB --sector-size=2048 --skip-size=64KiB {title}.ISO {title}.LOG"
+DDRESCUE="ddrescue -MA {device} --no-scrap --timeout={timeout} --unidirectional --sector-size=2048 --skip-size=64KiB {title}.ISO {title}.LOG"
 EJECT="eject {device}"
             
 def _pipe(cmd, stdout=PIPE, stderr=sys.stderr, args={}):
