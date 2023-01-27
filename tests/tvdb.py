@@ -2,6 +2,7 @@ import unittest
 from rip import tvdb
 
 class TestTvdb(unittest.TestCase):
+    INEXISTENT = "Pompompom"
     TVSHOW = "Wacky Races"
     POSSIBLE_MATCHES = [
         {'id': 'wacky-races', 'title': 'Wacky Races'},
@@ -69,6 +70,15 @@ class TestTvdb(unittest.TestCase):
         actual = provider.search(self.TVSHOW)
         self.assertListEqual(actual, self.POSSIBLE_MATCHES)
 
+    def test_inexistent(self):
+        """
+        The search function should return an empty array
+        if there is no matches
+        """
+        provider = tvdb.TVDB()
+        actual = provider.search(self.INEXISTENT)
+        self.assertListEqual(actual, [])
+
     def test_episodes(self):
         provider = tvdb.TVDB()
         actual = provider.episodes(self.TVSHOW_ID)
@@ -86,6 +96,13 @@ class TestDb(unittest.TestCase):
         EPISODE=5
         title = db.title(TestTvdb.TVSHOW, SEASON, EPISODE)
         self.assertEqual(title, TestTvdb.EPISODES[SEASON][EPISODE]["title"])
+
+    def test_inexistent_episodes(self):
+        db = tvdb.DB()
+        SEASON=1
+        EPISODE=5
+        title = db.title(TestTvdb.INEXISTENT, SEASON, EPISODE)
+        self.assertEqual(title, None)
 
 if __name__ == '__main__':
     unittest.main()

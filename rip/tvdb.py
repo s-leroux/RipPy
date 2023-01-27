@@ -16,6 +16,8 @@ SERIES_RE = re.compile("/series/")
 EPISODES_AP = "https://thetvdb.com/series/{id}/allseasons/official"
 EPISODE_RE = re.compile("/series/[^/]+/episodes/[0-9]+")
 
+NO_RESULTS_RE=re.compile("No results")
+
 import urllib.parse
 def urlencode(endpoint, params):
     querystring = urllib.parse.urlencode(params)
@@ -54,19 +56,25 @@ class TVDB:
         """ Query the TVDB search page to find results matching
             the given human-readable title.
 
-            Return a (possibly empty) array of results.
+            Return a (possibly empty) array of results
+            or None if we were unable to retrieve the data
         """
         retries = 3
         links = []
 
-        while retries and not len(links):
+        while retries:
             retries -= 1
-            html = self.browser.get(SEARCH_AP,dict(query=title))
+            self.browser.get(SEARCH_AP,dict(query=title))
+            hits = self.browser.driver.find_element_by_id("hits").get_attribute("innerHTML")
+            if hits:
+                break
+            # retry
+            print("RETRYING", title)
 
-            # Process the HTML page
-            soup = BeautifulSoup(html, "lxml")
-            hits = soup.find(id="hits")
-            links = hits.find_all("a", href=SERIES_RE)
+        # Process the HTML source
+        html = "<div class='hits'>" + hits + "</div>"
+        soup = BeautifulSoup(html, "lxml")
+        links = soup.find_all("a", href=SERIES_RE)
 
         result = []
         for link in links:
@@ -76,6 +84,12 @@ class TVDB:
                     id=link["href"].replace("/series/",""),
                     title=link.text,
                 ))
+
+        if not len(result):
+            # No result found -or- are we unable to retrieve the results?
+            nr = soup.find(text=NO_RESULTS_RE)
+            if not nr:
+                return None
 
         return result
 
@@ -102,12 +116,15 @@ class TVDB:
     def load(self, title):
         tvdb = TVDB()
         matches = self.search(title)
-        try:
-            id = matches[0]["id"];
-        except IndexError:
+
+        if matches is None:
+            return None
+        elif len(matches):
+            id = matches[0]["id"]
+            return self.episodes(id);
+        else:
             return {}
 
-        return self.episodes(id);
 
 class DB:
     def __init__(self):
@@ -121,9 +138,14 @@ class DB:
         season=int(season)
         episode=int(episode)
         episodes = self.cache.get(name)
-        if episodes is None: # test for None because {} is falsy
-            # not yet loaded (or empty?)
+        if episodes is None:
+            # not yet loaded (or failed)
+            # try to reload
             episodes = self.cache[name] = self.provider.load(name)
+
+        if episodes is None:
+            # Can't load. Give up
+            return None
 
         ep = episodes.get(season, {}).get(episode)
         return ep and ep["title"]
