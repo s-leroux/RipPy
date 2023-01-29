@@ -59,17 +59,20 @@ class TVDB:
             Return a (possibly empty) array of results
             or None if we were unable to retrieve the data
         """
-        retries = 3
-        links = []
+        retries = 5
+        delay = 0
 
+        self.browser.get(SEARCH_AP,dict(query=title))
         while retries:
             retries -= 1
-            self.browser.get(SEARCH_AP,dict(query=title))
+            time.sleep(delay)
+            delay = (delay + 0.250) * 2
             hits = self.browser.driver.find_element_by_id("hits").get_attribute("innerHTML")
+            hits = hits.strip()
             if hits:
                 break
             # retry
-            print("RETRYING", title)
+            print("WAITING FOR", title)
 
         # Process the HTML source
         html = "<div class='hits'>" + hits + "</div>"
