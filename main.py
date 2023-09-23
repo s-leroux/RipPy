@@ -640,7 +640,10 @@ def probe(meta, infile):
     stdout = TextIOWrapper(proc.stdout,errors='ignore')
     for line in stdout:
         print("PROBE:",line)
-        header, index, codec_type, *tail = fields=line.split(',')
+        try:
+            header, index, codec_type, *tail = fields=line.split(',')
+        except ValueError:
+            continue
         if header != 'stream':
             continue
 
