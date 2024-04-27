@@ -358,11 +358,15 @@ class Metadata:
 
             fmt="{title}"
 
-        return fmt.format(volume=volume.replace('/','-'),
-                          title=title.replace('/','-'))
+        return fmt.format(volume=sanitize(volume),
+                          title=sanitize(title))
 
     def chapters(self):
         return sorted(self._chapters)
+
+def sanitize(string):
+    string = re.sub(r'\s*[/?\\]\s*', '-', string)
+    return string.strip('- ')
 
 def makeBaseDir(filePath):
     dirs = os.path.dirname(filePath)
