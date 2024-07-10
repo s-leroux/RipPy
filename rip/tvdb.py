@@ -91,7 +91,7 @@ class TVDB:
 
         if not len(result):
             # No result found -or- are we unable to retrieve the results?
-            nr = soup.find(text=NO_RESULTS_RE)
+            nr = soup.find(string=NO_RESULTS_RE)
             if not nr:
                 return None
 
