@@ -49,6 +49,7 @@ FFMPEG = """ffmpeg -nostdin -y \\
             -probesize {psize} -analyzeduration {aduration} \\
             {ff} \\
             -fix_sub_duration \\
+            -canvas_size 720x576 \\
             -i file:{infile} -ss {ss}"""
 FFMPEG_VIDEO = """ \\
             -map 0:{ispec} \\
