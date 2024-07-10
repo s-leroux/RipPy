@@ -8,6 +8,7 @@ import pathlib
 import re
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 import atexit
 
 SEARCH_AP = "https://thetvdb.com/search"
@@ -67,7 +68,7 @@ class TVDB:
             retries -= 1
             time.sleep(delay)
             delay = (delay + 0.250) * 2
-            hits = self.browser.driver.find_element_by_id("hits").get_attribute("innerHTML")
+            hits = self.browser.driver.find_element(By.ID, "hits").get_attribute("innerHTML")
             hits = hits.strip()
             if hits:
                 break
