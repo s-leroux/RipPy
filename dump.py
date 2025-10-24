@@ -76,7 +76,7 @@ def make_lst_file(lsdvd):
         fname = lsdvd['file'] + '.ISO'
 
     title = lsdvd['title']
-    name = title.replace("_"," ").title()
+    name = os.path.basename(title).replace("_"," ").title()
 
     lstname = "{fname}.LST".format(fname=stem)
     print("WRITING", lstname)
