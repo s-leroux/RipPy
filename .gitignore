@@ -1,5 +1,10 @@
 *.py[cod]
 
+*.lst
+*.LST
+*.ISO
+*.VOB
+
 # C extensions
 *.so
 
