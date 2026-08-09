@@ -23,8 +23,12 @@ NF == 5 {
 	EPS[SEASON "x" EP]=1
     } else {
     	EPNUM = $4
-    	while (match(EPNUM, /([0-9]+)x([0-9]+)/, GROUPS)) {
-            EPISODE=(0 + GROUPS[1]) "x" (0 + GROUPS[2])
+        LOCAL_SEASON = SEASON
+        LOCAL_EPNUM = EP
+        while (match(EPNUM, /([0-9]+)?x([0-9]+)/, GROUPS)) {
+            if (GROUPS[1] != "") LOCAL_SEASON = (0 + GROUPS[1])
+            if (GROUPS[2] != "") LOCAL_EPNUM = (0 + GROUPS[2])
+            EPISODE = LOCAL_SEASON "x" LOCAL_EPNUM
 	    EPS[EPISODE]=1;
 	    EPNUM=substr(EPNUM, RSTART+RLENGTH);
 	}
